@@ -101,6 +101,48 @@ func (ns NullDevicePlatform) Value() (driver.Value, error) {
 	return string(ns.DevicePlatform), nil
 }
 
+type MediaKind string
+
+const (
+	MediaKindPhoto MediaKind = "photo"
+	MediaKindVideo MediaKind = "video"
+)
+
+func (e *MediaKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MediaKind(s)
+	case string:
+		*e = MediaKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MediaKind: %T", src)
+	}
+	return nil
+}
+
+type NullMediaKind struct {
+	MediaKind MediaKind `json:"media_kind"`
+	Valid     bool      `json:"valid"` // Valid is true if MediaKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMediaKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.MediaKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MediaKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMediaKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MediaKind), nil
+}
+
 type MediaStatus string
 
 const (
@@ -265,6 +307,13 @@ type Medium struct {
 	SizeBytes  pgtype.Int8   `json:"size_bytes"`
 	Status     MediaStatus   `json:"status"`
 	CreatedAt  time.Time     `json:"created_at"`
+	Kind       MediaKind     `json:"kind"`
+	ThumbKey   pgtype.Text   `json:"thumb_key"`
+	Width      pgtype.Int4   `json:"width"`
+	Height     pgtype.Int4   `json:"height"`
+	TakenAt    time.Time     `json:"taken_at"`
+	UpdatedAt  time.Time     `json:"updated_at"`
+	DeletedAt  *time.Time    `json:"deleted_at"`
 }
 
 type RefreshToken struct {

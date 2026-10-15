@@ -13,14 +13,19 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Mathatter10/daycare-app/backend-go/internal/auth"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/config"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/database"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/handlers"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/media"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/push"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/repository"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/storage"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/views"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/worker"
 )
 
 func main() {
@@ -52,6 +57,11 @@ func run() error {
 		if err := database.Migrate(ctx, pool); err != nil {
 			return err
 		}
+	}
+
+	dispatcher, mediaSvc, closeWorkers, err := setupMediaAndPush(ctx, cfg, pool)
+	if err != nil {
+		return err
 	}
 
 	authSvc := auth.NewService(pool,
@@ -86,7 +96,7 @@ func run() error {
 	v1.Post("/auth/logout", authAPI.Logout)
 	v1.Get("/me", requireJWT, authAPI.Me)
 
-	mobile := handlers.NewMobileHandler(pool, cfg.Location)
+	mobile := handlers.NewMobileHandler(pool, cfg.Location, mediaSvc, dispatcher)
 	caregiverOnly := middleware.RequireRole(repository.UserRoleCaregiver)
 	v1.Get("/children", requireJWT, mobile.Children)
 	v1.Get("/children/:id/timeline", requireJWT, mobile.Timeline)
@@ -95,6 +105,13 @@ func run() error {
 	v1.Post("/attendance/check-out", requireJWT, caregiverOnly, mobile.CheckOut)
 	v1.Put("/activities/:id", requireJWT, caregiverOnly, mobile.PutActivity)
 	v1.Delete("/activities/:id", requireJWT, caregiverOnly, mobile.DeleteActivity)
+	v1.Put("/media/:id/photo", requireJWT, caregiverOnly, mobile.PutPhoto)
+	v1.Put("/media/:id/video", requireJWT, caregiverOnly, mobile.PutVideo)
+	v1.Post("/media/:id/complete", requireJWT, caregiverOnly, mobile.CompleteVideo)
+	v1.Get("/media/:id", requireJWT, mobile.GetMedia)
+	v1.Delete("/media/:id", requireJWT, caregiverOnly, mobile.DeleteMedia)
+	v1.Post("/devices", requireJWT, mobile.RegisterDevice)
+	v1.Post("/devices/unregister", requireJWT, mobile.UnregisterDevice)
 
 	// Admin web (templ + HTMX, HttpOnly cookie session).
 	adminAuth := &handlers.AdminAuthHandler{Auth: authSvc, CookieSecure: cfg.CookieSecure}
@@ -151,7 +168,52 @@ func run() error {
 	slog.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
-	return app.ShutdownWithContext(shutdownCtx)
+	// Stop taking requests first, then let queued photo and push jobs finish.
+	return errors.Join(app.ShutdownWithContext(shutdownCtx), closeWorkers(shutdownCtx))
+}
+
+// setupMediaAndPush builds the push dispatcher and media service with their
+// background worker pools. Missing storage or FCM settings disable those
+// features instead of failing startup.
+func setupMediaAndPush(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (*push.Dispatcher, *media.Service, func(context.Context) error, error) {
+	var sender push.Sender = push.LogSender{}
+	if len(cfg.FCMCredentials) > 0 {
+		fcm, err := push.NewFCM(ctx, cfg.FCMCredentials, cfg.FCMEndpoint)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		sender = fcm
+		slog.Info("push notifications enabled (FCM)")
+	} else {
+		slog.Warn("push notifications disabled: FCM credentials not set")
+	}
+
+	var store *storage.Store
+	if cfg.Storage.Configured() {
+		s, err := storage.New(cfg.Storage)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := s.Check(ctx); err != nil {
+			slog.Error("media storage check failed", "err", err)
+		} else {
+			slog.Info("media storage enabled", "bucket", cfg.Storage.Bucket)
+		}
+		store = s
+	} else {
+		slog.Warn("media uploads disabled: S3 storage not configured")
+	}
+
+	pushPool := worker.NewPool("push", 4, 1000, 30*time.Second)
+	mediaPool := worker.NewPool("media", 2, 50, 2*time.Minute)
+	dispatcher := push.NewDispatcher(pool, sender, pushPool)
+	mediaSvc := media.NewService(pool, store, mediaPool, dispatcher, push.Messages{Location: cfg.Location})
+
+	closeAll := func(ctx context.Context) error {
+		// Media jobs may still queue notifications, so drain them first.
+		return errors.Join(mediaPool.Close(ctx), pushPool.Close(ctx))
+	}
+	return dispatcher, mediaSvc, closeAll, nil
 }
 
 // cleanupLoop periodically deletes expired sessions and refresh tokens.

@@ -1,4 +1,4 @@
-# Panduan Uji Coba (Sprint 1–4)
+# Panduan Uji Coba (Sprint 1–5)
 
 Fitur yang bisa dicoba sekarang:
 
@@ -7,7 +7,7 @@ Fitur yang bisa dicoba sekarang:
 | **Admin web** (`/admin`) | Login, dashboard, kelola kelas, pengasuh, orang tua, dan anak |
 | **API mobile** (`/api/v1`) | Login, daftar anak, check-in/out, catat aktivitas, timeline orang tua, sync |
 
-Belum ada: aplikasi mobile Flutter, foto/video, dan push notification. API mobile untuk sementara dicoba lewat PowerShell.
+Belum ada: aplikasi mobile Flutter. Foto/video bisa dicoba setelah R2 dikonfigurasi ([DEPLOYMENT.md](DEPLOYMENT.md) bagian 7); push notification baru bisa diterima setelah aplikasi Flutter ada. API mobile untuk sementara dicoba lewat PowerShell.
 
 Semua perintah dijalankan di **PowerShell** dari folder `backend-go`:
 
@@ -173,6 +173,33 @@ Lalu login sebagai **orang tua** anak itu (ulangi bagian D dengan email orang tu
 - Orang tua yang mencoba check-in mendapat `403`.
 
 Jenis aktivitas lain dan isi `details`-nya ada di [API.md](API.md#aktivitas-khusus-caregiver).
+
+---
+
+## F. Coba upload foto (Sprint 5)
+
+Butuh R2 sudah dikonfigurasi ([DEPLOYMENT.md](DEPLOYMENT.md) bagian 7a). Karena PowerShell 5.1 tidak mendukung upload file dengan mudah, gunakan **`curl.exe`** (sudah ada di Windows 10/11). Lanjutan dari bagian E, masih dengan token pengasuh:
+
+```powershell
+$fotoId = [guid]::NewGuid().ToString()
+curl.exe -X PUT "$B/api/v1/media/$fotoId/photo" `
+  -H "Authorization: Bearer $($login.access_token)" `
+  -F "file=@C:\Users\NAMA\Pictures\contoh.jpg" `
+  -F "child_id=$childId"
+
+# Tunggu 1-2 detik, lalu ambil hasilnya (status "ready" + url)
+$foto = Invoke-RestMethod "$B/api/v1/media/$fotoId" -Headers $H
+$foto.status
+Start-Process $foto.url     # membuka foto di browser
+```
+
+Yang seharusnya terjadi:
+- Foto tampil tegak (tidak miring) dan lebih kecil dari aslinya (maks. 1600 px).
+- Link foto **berhenti bekerja setelah 1 jam**. Coba buka lagi nanti: muncul error dari R2.
+- Foto juga muncul di timeline anak (`media` di langkah 4 bagian E).
+- Di dashboard Cloudflare R2, bucket `daycare-media` berisi folder `children/<id anak>/`.
+
+Push notification belum bisa diterima sampai aplikasi Flutter dibuat, karena butuh token FCM dari HP sungguhan.
 
 ---
 

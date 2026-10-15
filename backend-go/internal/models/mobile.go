@@ -120,3 +120,53 @@ func textPtr(t pgtype.Text) *string {
 	}
 	return &t.String
 }
+
+type MediaResponse struct {
+	ID           uuid.UUID  `json:"id"`
+	ChildID      uuid.UUID  `json:"child_id"`
+	ActivityID   *uuid.UUID `json:"activity_id"`
+	Kind         string     `json:"kind"`
+	Status       string     `json:"status"` // pending | ready | failed
+	MimeType     string     `json:"mime_type"`
+	Width        *int32     `json:"width"`
+	Height       *int32     `json:"height"`
+	SizeBytes    *int64     `json:"size_bytes"`
+	TakenAt      time.Time  `json:"taken_at"`
+	CreatedAt    time.Time  `json:"created_at"`
+	URL          *string    `json:"url"`           // signed, only when ready
+	ThumbnailURL *string    `json:"thumbnail_url"` // photos only
+	URLExpiresAt *time.Time `json:"url_expires_at"`
+}
+
+// NewMediaResponse builds the response; pass empty urls when not ready.
+func NewMediaResponse(m repository.Medium, url, thumbURL string, expires time.Time) MediaResponse {
+	resp := MediaResponse{
+		ID:        m.ID,
+		ChildID:   m.ChildID,
+		Kind:      string(m.Kind),
+		Status:    string(m.Status),
+		MimeType:  m.MimeType,
+		TakenAt:   m.TakenAt,
+		CreatedAt: m.CreatedAt,
+	}
+	if m.ActivityID.Valid {
+		resp.ActivityID = &m.ActivityID.UUID
+	}
+	if m.Width.Valid {
+		resp.Width = &m.Width.Int32
+	}
+	if m.Height.Valid {
+		resp.Height = &m.Height.Int32
+	}
+	if m.SizeBytes.Valid {
+		resp.SizeBytes = &m.SizeBytes.Int64
+	}
+	if url != "" {
+		resp.URL = &url
+		resp.URLExpiresAt = &expires
+	}
+	if thumbURL != "" {
+		resp.ThumbnailURL = &thumbURL
+	}
+	return resp
+}

@@ -48,7 +48,7 @@ ON CONFLICT (child_id, attendance_date) DO UPDATE SET
     check_in_by = CASE WHEN EXCLUDED.check_in_at < attendance.check_in_at
                        THEN EXCLUDED.check_in_by ELSE attendance.check_in_by END,
     check_in_at = LEAST(attendance.check_in_at, EXCLUDED.check_in_at)
-RETURNING id, child_id, attendance_date, check_in_at, check_in_by, check_out_at, check_out_by, picked_up_by, notes, created_at, updated_at
+RETURNING id, child_id, attendance_date, check_in_at, check_in_by, check_out_at, check_out_by, picked_up_by, notes, created_at, updated_at, (xmax = 0)::bool AS inserted
 `
 
 type CheckInParams struct {
@@ -58,16 +58,32 @@ type CheckInParams struct {
 	CheckInBy      uuid.UUID `json:"check_in_by"`
 }
 
+type CheckInRow struct {
+	ID             uuid.UUID     `json:"id"`
+	ChildID        uuid.UUID     `json:"child_id"`
+	AttendanceDate time.Time     `json:"attendance_date"`
+	CheckInAt      time.Time     `json:"check_in_at"`
+	CheckInBy      uuid.UUID     `json:"check_in_by"`
+	CheckOutAt     *time.Time    `json:"check_out_at"`
+	CheckOutBy     uuid.NullUUID `json:"check_out_by"`
+	PickedUpBy     pgtype.Text   `json:"picked_up_by"`
+	Notes          pgtype.Text   `json:"notes"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
+	Inserted       bool          `json:"inserted"`
+}
+
 // Idempotent: replaying a check-in keeps the earliest time, so an offline
-// queue can safely resend it.
-func (q *Queries) CheckIn(ctx context.Context, arg CheckInParams) (Attendance, error) {
+// queue can safely resend it. inserted (xmax = 0) is true only for the
+// first check-in, which is the one that notifies parents.
+func (q *Queries) CheckIn(ctx context.Context, arg CheckInParams) (CheckInRow, error) {
 	row := q.db.QueryRow(ctx, checkIn,
 		arg.ChildID,
 		arg.AttendanceDate,
 		arg.CheckInAt,
 		arg.CheckInBy,
 	)
-	var i Attendance
+	var i CheckInRow
 	err := row.Scan(
 		&i.ID,
 		&i.ChildID,
@@ -80,6 +96,7 @@ func (q *Queries) CheckIn(ctx context.Context, arg CheckInParams) (Attendance, e
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Inserted,
 	)
 	return i, err
 }
@@ -518,7 +535,7 @@ ON CONFLICT (id) DO UPDATE SET
     notes      = EXCLUDED.notes
 WHERE activities.child_id = EXCLUDED.child_id
   AND activities.deleted_at IS NULL
-RETURNING id
+RETURNING id, (xmax = 0)::bool AS inserted
 `
 
 type UpsertActivityParams struct {
@@ -532,10 +549,15 @@ type UpsertActivityParams struct {
 	Notes       pgtype.Text  `json:"notes"`
 }
 
+type UpsertActivityRow struct {
+	ID       uuid.UUID `json:"id"`
+	Inserted bool      `json:"inserted"`
+}
+
 // Create or update by client-generated id. The WHERE stops an id from being
 // reused for another child and leaves deleted activities deleted; in both
 // cases no row is returned.
-func (q *Queries) UpsertActivity(ctx context.Context, arg UpsertActivityParams) (uuid.UUID, error) {
+func (q *Queries) UpsertActivity(ctx context.Context, arg UpsertActivityParams) (UpsertActivityRow, error) {
 	row := q.db.QueryRow(ctx, upsertActivity,
 		arg.ID,
 		arg.ChildID,
@@ -546,7 +568,7 @@ func (q *Queries) UpsertActivity(ctx context.Context, arg UpsertActivityParams) 
 		arg.Details,
 		arg.Notes,
 	)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i UpsertActivityRow
+	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
 }

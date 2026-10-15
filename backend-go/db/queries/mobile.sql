@@ -41,7 +41,8 @@ SELECT * FROM attendance
 WHERE child_id = $1 AND attendance_date = $2;
 
 -- Idempotent: replaying a check-in keeps the earliest time, so an offline
--- queue can safely resend it.
+-- queue can safely resend it. inserted (xmax = 0) is true only for the
+-- first check-in, which is the one that notifies parents.
 -- name: CheckIn :one
 INSERT INTO attendance (child_id, attendance_date, check_in_at, check_in_by)
 VALUES ($1, $2, $3, $4)
@@ -49,7 +50,7 @@ ON CONFLICT (child_id, attendance_date) DO UPDATE SET
     check_in_by = CASE WHEN EXCLUDED.check_in_at < attendance.check_in_at
                        THEN EXCLUDED.check_in_by ELSE attendance.check_in_by END,
     check_in_at = LEAST(attendance.check_in_at, EXCLUDED.check_in_at)
-RETURNING *;
+RETURNING *, (xmax = 0)::bool AS inserted;
 
 -- name: CheckOut :one
 UPDATE attendance SET
@@ -78,7 +79,7 @@ ON CONFLICT (id) DO UPDATE SET
     notes      = EXCLUDED.notes
 WHERE activities.child_id = EXCLUDED.child_id
   AND activities.deleted_at IS NULL
-RETURNING id;
+RETURNING id, (xmax = 0)::bool AS inserted;
 
 -- name: SoftDeleteActivity :exec
 UPDATE activities SET deleted_at = now()

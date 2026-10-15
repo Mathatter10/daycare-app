@@ -2,7 +2,7 @@
 
 Panduan ini untuk backend Go di folder `backend-go/`.
 
-> **Status saat ini (Sprint 4):** admin web di `/admin` (kelas, anak, pengasuh, orang tua) dan API mobile lengkap untuk login, absensi, aktivitas harian, timeline orang tua, dan sinkronisasi offline (lihat [API.md](API.md)). Foto/video dan push notification **belum ada**.
+> **Status saat ini (Sprint 5):** admin web di `/admin` (kelas, anak, pengasuh, orang tua) dan API mobile lengkap: login, absensi, aktivitas, timeline, sinkronisasi offline, foto/video, dan push notification (lihat [API.md](API.md)). Foto/video butuh **Cloudflare R2** dan push butuh **Firebase** (lihat bagian 7). Tanpa keduanya server tetap berjalan, hanya fitur itu yang nonaktif.
 
 ## Alur awal memakai admin web
 
@@ -177,7 +177,53 @@ Setiap `git push` ke branch `main` akan otomatis memicu deploy ulang.
 
 ---
 
-## 7. Alternatif: VPS sendiri (Docker)
+## 7. Aktifkan foto/video (Cloudflare R2) dan push notification (Firebase)
+
+### 7a. Cloudflare R2 (penyimpanan foto & video)
+
+R2 gratis sampai 10 GB dan tanpa biaya unduh. Mengaktifkan R2 tetap meminta data kartu kredit/PayPal walaupun pemakaian gratis.
+
+1. Login ke [dash.cloudflare.com](https://dash.cloudflare.com) → **R2 Object Storage** → **Create bucket**.
+   Nama: `daycare-media`. **Jangan** aktifkan *Public access*: foto anak hanya boleh dibuka lewat signed URL.
+2. Di halaman R2 → **Manage R2 API Tokens** → **Create API token**:
+   - Permissions: **Object Read & Write**
+   - Specify bucket: **daycare-media** saja
+3. Salin tiga nilai yang muncul **sekali**: *Access Key ID*, *Secret Access Key*, dan endpoint S3 (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`).
+4. Di Render → **Environment**, tambahkan:
+
+   | Key | Value |
+   |---|---|
+   | `S3_ENDPOINT` | `<ACCOUNT_ID>.r2.cloudflarestorage.com` (boleh dengan `https://`) |
+   | `S3_BUCKET` | `daycare-media` |
+   | `S3_ACCESS_KEY_ID` | dari langkah 3 |
+   | `S3_SECRET_ACCESS_KEY` | dari langkah 3 |
+
+   `S3_REGION` (default `auto`) dan `S3_USE_SSL` (default `true`) tidak perlu diisi untuk R2.
+
+### 7b. Firebase Cloud Messaging (push notification)
+
+1. Buka [console.firebase.google.com](https://console.firebase.google.com) → **Add project** (Google Analytics boleh dimatikan).
+2. ⚙️ **Project settings** → tab **Service accounts** → **Generate new private key** → file JSON terunduh.
+   File ini rahasia. **Jangan** di-commit ke Git.
+3. Di Render → **Environment** → **Secret Files** → **Add Secret File**:
+   - Filename: `fcm.json`
+   - Contents: tempel seluruh isi file JSON
+4. Masih di **Environment**, tambahkan `FCM_CREDENTIALS_FILE` = `/etc/secrets/fcm.json`.
+
+Aplikasi Flutter nanti juga perlu didaftarkan di project Firebase yang sama (Android/iOS app) agar HP bisa menerima notifikasi. Itu dikerjakan saat membuat aplikasi mobile.
+
+### 7c. Cek hasilnya
+
+Setelah Render deploy ulang, buka **Logs** dan cari:
+```
+"msg":"media storage enabled","bucket":"daycare-media"
+"msg":"push notifications enabled (FCM)"
+```
+Jika muncul `media storage check failed`, periksa nama bucket dan izin token R2.
+
+---
+
+## 8. Alternatif: VPS sendiri (Docker)
 
 Jika memakai VPS (mis. DigitalOcean, IDCloudHost, Biznet Gio) yang sudah terpasang Docker:
 
@@ -198,7 +244,7 @@ Lalu pasang reverse proxy dengan HTTPS (mis. **Caddy**: `reverse_proxy 127.0.0.1
 
 ---
 
-## 8. Masalah yang sering terjadi
+## 9. Masalah yang sering terjadi
 
 | Gejala | Penyebab & solusi |
 |---|---|
@@ -206,6 +252,8 @@ Lalu pasang reverse proxy dengan HTTPS (mis. **Caddy**: `reverse_proxy 127.0.0.1
 | `JWT_SECRET must be at least 32 characters` | Secret kosong/terlalu pendek. Buat dengan `openssl rand -base64 48`. |
 | Halaman admin tampil tanpa gaya (polos) | `static/css/output.css` belum dibuat. Jalankan `npm run css`. |
 | Login admin gagal terus padahal benar | Akun bukan role `admin`, atau sudah 10× salah dalam 15 menit (tunggu). |
+| `media storage is not configured` (503) | Variabel `S3_*` belum diisi di Render (bagian 7a). |
+| Log `push notifications disabled` | `FCM_CREDENTIALS_FILE` belum diisi atau Secret File belum dibuat (bagian 7b). |
 | `429 too many login attempts` | 10 kali gagal login untuk email itu dalam 15 menit. Tunggu 15 menit. |
 | `ping database: ... connection refused` | Alamat database salah, atau Postgres lokal tidak berjalan. |
 | Error `prepared statement ... already exists` | Memakai alamat *pooler*. Gunakan alamat direct (tanpa `-pooler`). |

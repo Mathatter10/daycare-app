@@ -14,8 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Mathatter10/daycare-app/backend-go/internal/activity"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/media"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/models"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/push"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/repository"
 )
 
@@ -36,10 +38,20 @@ type MobileHandler struct {
 	DB       *pgxpool.Pool
 	Q        *repository.Queries
 	Location *time.Location // daycare time zone; defines "today"
+	Media    *media.Service
+	Push     *push.Dispatcher
+	Msgs     push.Messages
 }
 
-func NewMobileHandler(pool *pgxpool.Pool, loc *time.Location) *MobileHandler {
-	return &MobileHandler{DB: pool, Q: repository.New(pool), Location: loc}
+func NewMobileHandler(pool *pgxpool.Pool, loc *time.Location, mediaSvc *media.Service, dispatcher *push.Dispatcher) *MobileHandler {
+	return &MobileHandler{
+		DB:       pool,
+		Q:        repository.New(pool),
+		Location: loc,
+		Media:    mediaSvc,
+		Push:     dispatcher,
+		Msgs:     push.Messages{Location: loc},
+	}
 }
 
 // --- Children -----------------------------------------------------------------
@@ -101,10 +113,30 @@ func (h *MobileHandler) Timeline(c fiber.Ctx) error {
 		return err
 	}
 
+	mediaItems := []models.MediaResponse{}
+	if h.Media != nil && h.Media.Enabled() {
+		rows, err := h.Q.ListChildMedia(ctx, repository.ListChildMediaParams{
+			ChildID:  childID,
+			FromTime: day,
+			ToTime:   day.AddDate(0, 0, 1),
+		})
+		if err != nil {
+			return err
+		}
+		for _, m := range rows {
+			item, err := h.mediaResponse(c, m)
+			if err != nil {
+				return err
+			}
+			mediaItems = append(mediaItems, item)
+		}
+	}
+
 	return c.JSON(fiber.Map{
 		"date":       day.Format(models.DateLayout),
 		"attendance": attendance,
 		"activities": activities,
+		"media":      mediaItems,
 	})
 }
 
@@ -136,7 +168,7 @@ func (h *MobileHandler) CheckIn(c fiber.Ctx) error {
 		return err
 	}
 
-	att, err := h.Q.CheckIn(c.Context(), repository.CheckInParams{
+	row, err := h.Q.CheckIn(c.Context(), repository.CheckInParams{
 		ChildID:        req.ChildID,
 		AttendanceDate: dateOnly(h.dayOf(at)),
 		CheckInAt:      at,
@@ -145,7 +177,22 @@ func (h *MobileHandler) CheckIn(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(models.NewAttendanceResponse(att))
+	if row.Inserted && isFresh(at) {
+		h.Push.NotifyParents(row.ChildID, h.Msgs.CheckIn(row.ChildID, row.ID, at))
+	}
+	return c.JSON(models.NewAttendanceResponse(repository.Attendance{
+		ID:             row.ID,
+		ChildID:        row.ChildID,
+		AttendanceDate: row.AttendanceDate,
+		CheckInAt:      row.CheckInAt,
+		CheckInBy:      row.CheckInBy,
+		CheckOutAt:     row.CheckOutAt,
+		CheckOutBy:     row.CheckOutBy,
+		PickedUpBy:     row.PickedUpBy,
+		Notes:          row.Notes,
+		CreatedAt:      row.CreatedAt,
+		UpdatedAt:      row.UpdatedAt,
+	}))
 }
 
 // CheckOut records pick-up for the day of `at`. Resending overwrites with
@@ -190,6 +237,9 @@ func (h *MobileHandler) CheckOut(c fiber.Ctx) error {
 	})
 	if err != nil {
 		return err
+	}
+	if existing.CheckOutAt == nil && isFresh(at) {
+		h.Push.NotifyParents(att.ChildID, h.Msgs.CheckOut(att.ChildID, att.ID, at, req.PickedUpBy))
 	}
 	return c.JSON(models.NewAttendanceResponse(att))
 }
@@ -257,7 +307,13 @@ func (h *MobileHandler) PutActivity(c fiber.Ctx) error {
 	}
 
 	ctx := c.Context()
-	_, err = h.Q.UpsertActivity(ctx, repository.UpsertActivityParams{
+	prev, err := h.Q.GetActivity(ctx, id)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	hadEnd := err == nil && prev.EndedAt != nil
+
+	upserted, err := h.Q.UpsertActivity(ctx, repository.UpsertActivityParams{
 		ID:          id,
 		ChildID:     req.ChildID,
 		CaregiverID: middleware.CurrentUser(c).ID,
@@ -280,6 +336,17 @@ func (h *MobileHandler) PutActivity(c fiber.Ctx) error {
 	}
 	if err != nil {
 		return err
+	}
+
+	event := push.ActivityEvent{
+		ID: id, ChildID: req.ChildID, Type: typ, StartedAt: startedAt,
+		EndedAt: req.EndedAt, Details: details, Notes: req.Notes,
+	}
+	switch {
+	case upserted.Inserted && isFresh(startedAt):
+		h.Push.NotifyParents(req.ChildID, h.Msgs.ActivityLogged(event))
+	case !upserted.Inserted && typ == repository.ActivityTypeSleep && !hadEnd && req.EndedAt != nil && isFresh(*req.EndedAt):
+		h.Push.NotifyParents(req.ChildID, h.Msgs.WokeUp(event))
 	}
 
 	row, err := h.Q.GetActivityView(ctx, id)
@@ -356,6 +423,12 @@ func (h *MobileHandler) dayOf(t time.Time) time.Time {
 func dateOnly(day time.Time) time.Time {
 	y, m, d := day.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+// isFresh reports whether an event is recent enough to notify parents
+// about; records replayed from a long offline queue stay silent.
+func isFresh(t time.Time) bool {
+	return time.Since(t) < 2*time.Hour
 }
 
 // clientTime validates a timestamp sent by a (possibly offline) client;

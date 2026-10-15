@@ -231,6 +231,7 @@ func (h *AdminHandler) signOutEverywhere(ctx context.Context, userID uuid.UUID) 
 	return errors.Join(
 		h.Q.RevokeAllRefreshTokensForUser(ctx, userID),
 		h.Q.DeleteWebSessionsForUser(ctx, userID),
+		h.Q.DeleteDeviceTokensForUser(ctx, userID),
 	)
 }
 

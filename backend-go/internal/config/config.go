@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
+
+	"github.com/Mathatter10/daycare-app/backend-go/internal/storage"
 )
 
 type Config struct {
@@ -29,6 +32,15 @@ type Config struct {
 	Location *time.Location
 	// AutoMigrate applies pending database migrations at startup.
 	AutoMigrate bool
+
+	// Storage holds S3-compatible object storage settings (Cloudflare R2,
+	// AWS S3, Supabase, MinIO). Media endpoints answer 503 until set.
+	Storage storage.Config
+
+	// FCMCredentials is a Firebase service-account JSON key. When empty,
+	// push notifications are logged instead of sent.
+	FCMCredentials []byte
+	FCMEndpoint    string
 }
 
 // Load reads a .env file if present (local development only) and then
@@ -59,6 +71,30 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("DAYCARE_TIMEZONE %q: %w", tz, err)
 	}
 	cfg.Location = loc
+
+	// Accept the endpoint as shown in provider dashboards (with scheme or
+	// trailing slash); the client wants a bare host[:port].
+	endpoint := strings.TrimSuffix(os.Getenv("S3_ENDPOINT"), "/")
+	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
+	cfg.Storage = storage.Config{
+		Endpoint:        endpoint,
+		Region:          getEnv("S3_REGION", "auto"),
+		Bucket:          os.Getenv("S3_BUCKET"),
+		AccessKeyID:     os.Getenv("S3_ACCESS_KEY_ID"),
+		SecretAccessKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
+		UseSSL:          getBool("S3_USE_SSL", true),
+	}
+
+	cfg.FCMEndpoint = getEnv("FCM_ENDPOINT", "https://fcm.googleapis.com")
+	if path := os.Getenv("FCM_CREDENTIALS_FILE"); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("FCM_CREDENTIALS_FILE: %w", err)
+		}
+		cfg.FCMCredentials = b
+	} else if js := os.Getenv("FCM_CREDENTIALS_JSON"); js != "" {
+		cfg.FCMCredentials = []byte(js)
+	}
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
