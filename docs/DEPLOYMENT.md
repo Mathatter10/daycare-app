@@ -2,7 +2,7 @@
 
 Panduan ini untuk backend Go di folder `backend-go/`.
 
-> **Status saat ini (Sprint 1):** backend baru berisi fondasi: koneksi database, skema tabel, dan endpoint `GET /api/health`. Login, API untuk aplikasi mobile, dan dashboard admin **belum ada**. Setelah deploy, yang bisa dicek baru server hidup dan tersambung ke database.
+> **Status saat ini (Sprint 2):** sudah ada login untuk aplikasi mobile (JWT, lihat [API.md](API.md)) dan login admin web di `/admin`. Fitur data (anak, kelas, absensi, aktivitas) **belum ada**, dashboard admin masih halaman kosong.
 
 Arsitektur deploy yang disarankan untuk MVP:
 
@@ -17,11 +17,12 @@ Arsitektur deploy yang disarankan untuk MVP:
 | Kebutuhan | Keterangan |
 |---|---|
 | Go 1.26+ | Sudah terpasang di `C:\Program Files\Go`. Cek: `go version` |
+| Node.js | Hanya untuk build CSS Tailwind. Cek: `node --version` |
 | Git + akun GitHub | Render mengambil kode dari GitHub |
 | Akun [Neon](https://neon.tech) | Database PostgreSQL gratis |
 | Akun [Render](https://render.com) | Hosting backend gratis |
 
-`templ` dan `goose` sudah dipasang sebagai *tool* di `go.mod`, jadi tidak perlu diinstal terpisah. Jalankan dengan `go tool templ ...` dan `go tool goose ...`.
+`templ`, `goose`, dan `sqlc` sudah dipasang sebagai *tool* di `go.mod`, jadi tidak perlu diinstal terpisah. Jalankan dengan `go tool templ ...`, `go tool goose ...`, dan `go tool sqlc ...`.
 
 > Jika terminal bilang `go: command not found`, tutup lalu buka lagi terminal/VS Code supaya PATH ter-update.
 
@@ -50,7 +51,7 @@ Dari folder `backend-go/`:
    cp .env.example .env
    ```
    - `DATABASE_URL` = connection string Neon (branch `dev`) dari langkah 2.
-   - `JWT_SECRET` dan `SESSION_SECRET` = string acak panjang. Buat dengan (di Git Bash):
+   - `JWT_SECRET` = string acak minimal 32 karakter (**wajib**, server tidak mau jalan tanpanya). Buat dengan (di Git Bash):
      ```bash
      openssl rand -base64 48
      ```
@@ -62,13 +63,23 @@ Dari folder `backend-go/`:
    go tool goose -dir migrations postgres "<DATABASE_URL>" status   # cek: 001 = Applied
    ```
 
-3. **Jalankan server:**
+3. **Buat akun admin pertama:**
    ```bash
-   go tool templ generate   # hanya perlu jika ada file .templ yang diubah
+   go run ./cmd/createuser -email admin@daycare.id -name "Nama Admin" -role admin
+   ```
+   Kata sandi akan ditanyakan (min. 8 karakter). Jalankan di **PowerShell** agar ketikan kata sandi tersembunyi; di Git Bash ketikan akan terlihat.
+   Untuk akun uji pengasuh/orang tua, ganti `-role caregiver` atau `-role parent`.
+
+4. **Build CSS dan jalankan server:**
+   ```bash
+   npm install              # sekali saja
+   npm run css              # ulangi setiap ada perubahan class Tailwind di file .templ
+   go tool templ generate   # ulangi setiap ada perubahan file .templ
    go run ./cmd/server
    ```
+   Buka http://localhost:8080/admin lalu login dengan akun admin dari langkah 3.
 
-4. **Cek di terminal lain:**
+5. **Cek health di terminal lain:**
    ```bash
    curl http://localhost:8080/api/health
    ```
@@ -107,6 +118,12 @@ go tool goose -dir migrations postgres "<DATABASE_URL_PRODUKSI>" up
 
 Lakukan ini **setiap kali** ada file migration baru, **sebelum** deploy kode yang membutuhkannya.
 
+Buat akun admin produksi (sekali saja), juga dari komputer sendiri:
+
+```bash
+go run ./cmd/createuser -database-url "<DATABASE_URL_PRODUKSI>" -email admin@daycare.id -name "Nama Admin" -role admin
+```
+
 ---
 
 ## 6. Deploy ke Render
@@ -131,7 +148,8 @@ Lakukan ini **setiap kali** ada file migration baru, **sebelum** deploy kode yan
    | `APP_ENV` | `production` |
    | `DATABASE_URL` | connection string Neon branch `main` |
    | `JWT_SECRET` | string acak baru (min. 32 karakter, **beda** dari lokal) |
-   | `SESSION_SECRET` | string acak baru (min. 32 karakter) |
+
+   `SESSION_SECRET` dari Sprint 1 **tidak dipakai lagi** dan boleh dihapus. Opsional: `SESSION_TTL` (default `12h`, lama login admin web).
 
    `PORT` tidak perlu diisi, Render mengaturnya otomatis.
 
@@ -140,6 +158,7 @@ Lakukan ini **setiap kali** ada file migration baru, **sebelum** deploy kode yan
    ```bash
    curl https://daycare-api.onrender.com/api/health
    ```
+   Lalu buka `https://daycare-api.onrender.com/admin` dan login dengan akun admin produksi.
 
 Setiap `git push` ke branch `main` akan otomatis memicu deploy ulang.
 
@@ -156,7 +175,7 @@ git clone https://github.com/Mathatter10/daycare-app.git
 cd daycare-app/backend-go
 docker build -t daycare-api .
 
-# file .env.production berisi APP_ENV, DATABASE_URL, JWT_SECRET, SESSION_SECRET
+# file .env.production berisi APP_ENV, DATABASE_URL, JWT_SECRET
 docker run --rm --env-file .env.production --entrypoint /app/goose daycare-api \
   -dir /app/migrations postgres "<DATABASE_URL_PRODUKSI>" up
 
@@ -173,7 +192,10 @@ Lalu pasang reverse proxy dengan HTTPS (mis. **Caddy**: `reverse_proxy 127.0.0.1
 | Gejala | Penyebab & solusi |
 |---|---|
 | `DATABASE_URL is required` | `.env` tidak ada / env var belum diisi di Render. |
-| `JWT_SECRET must be at least 32 characters in production` | Secret terlalu pendek saat `APP_ENV=production`. Buat ulang dengan `openssl rand -base64 48`. |
+| `JWT_SECRET must be at least 32 characters` | Secret kosong/terlalu pendek. Buat dengan `openssl rand -base64 48`. |
+| Halaman admin tampil tanpa gaya (polos) | `static/css/output.css` belum dibuat. Jalankan `npm run css`. |
+| Login admin gagal terus padahal benar | Akun bukan role `admin`, atau sudah 10× salah dalam 15 menit (tunggu). |
+| `429 too many login attempts` | 10 kali gagal login untuk email itu dalam 15 menit. Tunggu 15 menit. |
 | `ping database: ... connection refused` | Alamat database salah, atau Postgres lokal tidak berjalan. |
 | Error `prepared statement ... already exists` | Memakai alamat *pooler*. Gunakan alamat direct (tanpa `-pooler`). |
 | Health check `"database":"down"` | Database Neon sedang *suspend* atau kredensial berubah. Coba lagi setelah beberapa detik. |

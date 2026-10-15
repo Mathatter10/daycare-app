@@ -13,9 +13,11 @@ import (
 	"github.com/gofiber/fiber/v3/middleware/recover"
 	"github.com/gofiber/fiber/v3/middleware/static"
 
+	"github.com/Mathatter10/daycare-app/backend-go/internal/auth"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/config"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/database"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/handlers"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
 )
 
 func main() {
@@ -43,6 +45,11 @@ func run() error {
 	}
 	defer pool.Close()
 
+	authSvc := auth.NewService(pool,
+		auth.NewJWTManager(cfg.JWTSecret, cfg.JWTAccessTTL),
+		cfg.JWTRefreshTTL, cfg.SessionTTL)
+	go cleanupLoop(ctx, authSvc)
+
 	app := fiber.New(fiber.Config{
 		AppName:      "daycare-api",
 		ReadTimeout:  30 * time.Second, // media uploads need headroom
@@ -57,9 +64,30 @@ func run() error {
 	health := &handlers.HealthHandler{DB: pool}
 	app.Get("/api/health", health.Check)
 
-	// Route groups wired up in later sprints:
-	//   /api/v1/...  JSON API for mobile (JWT)
-	//   /admin/...   templ + HTMX admin web (HttpOnly cookie session)
+	// Middleware is attached per route: a Group("", mw) in Fiber would also
+	// wrap the public login routes that share the prefix.
+	requireJWT := middleware.RequireJWT(authSvc)
+	requireAdmin := middleware.RequireAdminSession(authSvc)
+
+	// Mobile JSON API (JWT).
+	authAPI := &handlers.AuthAPIHandler{Auth: authSvc}
+	v1 := app.Group("/api/v1")
+	v1.Post("/auth/login", middleware.LoginRateLimit(), authAPI.Login)
+	v1.Post("/auth/refresh", authAPI.Refresh)
+	v1.Post("/auth/logout", authAPI.Logout)
+	v1.Get("/me", requireJWT, authAPI.Me)
+
+	// Admin web (templ + HTMX, HttpOnly cookie session).
+	adminAuth := &handlers.AdminAuthHandler{Auth: authSvc, CookieSecure: cfg.CookieSecure}
+	admin := app.Group("/admin", middleware.SameOrigin())
+	admin.Get("/login", adminAuth.LoginPage)
+	admin.Post("/login", middleware.LoginRateLimit(), adminAuth.Login)
+	admin.Post("/logout", adminAuth.Logout)
+	admin.Get("/", requireAdmin, adminAuth.Dashboard)
+
+	app.Get("/", func(c fiber.Ctx) error {
+		return c.Redirect().Status(fiber.StatusSeeOther).To("/admin")
+	})
 	app.Get("/static*", static.New("./static"))
 
 	errCh := make(chan error, 1)
@@ -78,6 +106,22 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	return app.ShutdownWithContext(shutdownCtx)
+}
+
+// cleanupLoop periodically deletes expired sessions and refresh tokens.
+func cleanupLoop(ctx context.Context, svc *auth.Service) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := svc.CleanupExpired(ctx); err != nil {
+				slog.Error("cleanup expired auth records", "err", err)
+			}
+		}
+	}
 }
 
 // errorHandler returns JSON for every error and hides internal details

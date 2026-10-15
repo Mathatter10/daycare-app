@@ -19,7 +19,7 @@ type Config struct {
 	JWTSecret        string
 	JWTAccessTTL     time.Duration
 	JWTRefreshTTL    time.Duration
-	SessionSecret    string
+	SessionTTL       time.Duration
 	CookieSecure     bool
 	ShutdownTimeout  time.Duration
 	DBConnectTimeout time.Duration
@@ -38,9 +38,9 @@ func Load() (*Config, error) {
 		Port:             getEnv("PORT", "8080"),
 		DatabaseURL:      os.Getenv("DATABASE_URL"),
 		JWTSecret:        os.Getenv("JWT_SECRET"),
-		SessionSecret:    os.Getenv("SESSION_SECRET"),
 		JWTAccessTTL:     getDuration("JWT_ACCESS_TTL", 24*time.Hour),
 		JWTRefreshTTL:    getDuration("JWT_REFRESH_TTL", 30*24*time.Hour),
+		SessionTTL:       getDuration("SESSION_TTL", 12*time.Hour),
 		ShutdownTimeout:  getDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
 		DBConnectTimeout: getDuration("DB_CONNECT_TIMEOUT", 10*time.Second),
 	}
@@ -59,13 +59,8 @@ func (c *Config) validate() error {
 	if c.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
 	}
-	if c.IsProduction() {
-		if len(c.JWTSecret) < 32 {
-			errs = append(errs, errors.New("JWT_SECRET must be at least 32 characters in production"))
-		}
-		if len(c.SessionSecret) < 32 {
-			errs = append(errs, errors.New("SESSION_SECRET must be at least 32 characters in production"))
-		}
+	if len(c.JWTSecret) < 32 {
+		errs = append(errs, errors.New("JWT_SECRET must be at least 32 characters"))
 	}
 	return errors.Join(errs...)
 }
