@@ -2,7 +2,7 @@
 
 Panduan ini untuk backend Go di folder `backend-go/`.
 
-> **Status saat ini (Sprint 3):** sudah ada login aplikasi mobile (JWT, lihat [API.md](API.md)) dan admin web di `/admin` untuk mengelola **kelas, anak, pengasuh, dan orang tua**. Absensi dan aktivitas harian **belum ada**.
+> **Status saat ini (Sprint 4):** admin web di `/admin` (kelas, anak, pengasuh, orang tua) dan API mobile lengkap untuk login, absensi, aktivitas harian, timeline orang tua, dan sinkronisasi offline (lihat [API.md](API.md)). Foto/video dan push notification **belum ada**.
 
 ## Alur awal memakai admin web
 
@@ -127,7 +127,7 @@ cd backend-go
 go tool goose -dir migrations postgres "<DATABASE_URL_PRODUKSI>" up
 ```
 
-Lakukan ini **setiap kali** ada file migration baru, **sebelum** deploy kode yang membutuhkannya.
+Sejak Sprint 4, server **menjalankan migration baru secara otomatis** setiap kali start (`AUTO_MIGRATE=true`, default). Perintah `goose` di atas tetap berguna untuk mengecek status (`... status`) atau jika `AUTO_MIGRATE=false`.
 
 Buat akun admin produksi (sekali saja), juga dari komputer sendiri:
 

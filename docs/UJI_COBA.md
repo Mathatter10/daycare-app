@@ -1,13 +1,13 @@
-# Panduan Uji Coba (Sprint 1–3)
+# Panduan Uji Coba (Sprint 1–4)
 
 Fitur yang bisa dicoba sekarang:
 
 | Bagian | Bisa dicoba |
 |---|---|
 | **Admin web** (`/admin`) | Login, dashboard, kelola kelas, pengasuh, orang tua, dan anak |
-| **API mobile** (`/api/v1`) | Login pengasuh / orang tua, refresh token, logout, profil (`/me`) |
+| **API mobile** (`/api/v1`) | Login, daftar anak, check-in/out, catat aktivitas, timeline orang tua, sync |
 
-Belum ada: aplikasi mobile Flutter, absensi, dan aktivitas harian. API mobile untuk sementara dicoba lewat PowerShell.
+Belum ada: aplikasi mobile Flutter, foto/video, dan push notification. API mobile untuk sementara dicoba lewat PowerShell.
 
 Semua perintah dijalankan di **PowerShell** dari folder `backend-go`:
 
@@ -129,6 +129,50 @@ Uji keamanannya:
 - Klik **Reset sandi** → kata sandi lama tidak bisa dipakai login lagi.
 
 Detail semua endpoint ada di [API.md](API.md).
+
+---
+
+## E. Coba absensi dan aktivitas (Sprint 4)
+
+Lanjutan dari bagian D. Login sebagai **pengasuh** yang sudah ditugaskan ke kelas, dan pastikan ada anak di kelas itu (bagian C).
+
+```powershell
+$H = @{ Authorization = "Bearer $($login.access_token)" }   # token pengasuh dari bagian D
+
+# 1. Daftar anak di kelas pengasuh
+$anak = (Invoke-RestMethod "$B/api/v1/children" -Headers $H).children
+$anak | Format-Table full_name, class_name
+$childId = $anak[0].id
+
+# 2. Check-in
+Invoke-RestMethod -Method Post "$B/api/v1/attendance/check-in" -Headers $H -ContentType "application/json" `
+  -Body (@{ child_id = $childId } | ConvertTo-Json)
+
+# 3. Catat makan (id aktivitas dibuat di sisi aplikasi)
+$actId = [guid]::NewGuid().ToString()
+$makan = @{
+  child_id   = $childId
+  type       = "eat"
+  started_at = (Get-Date).ToString("o")
+  details    = @{ portion = "half"; menu = "Bubur ayam" }
+  notes      = "Lahap"
+} | ConvertTo-Json
+Invoke-RestMethod -Method Put "$B/api/v1/activities/$actId" -Headers $H -ContentType "application/json" -Body $makan
+
+# 4. Lihat timeline hari ini
+Invoke-RestMethod "$B/api/v1/children/$childId/timeline" -Headers $H | ConvertTo-Json -Depth 5
+
+# 5. Check-out
+Invoke-RestMethod -Method Post "$B/api/v1/attendance/check-out" -Headers $H -ContentType "application/json" `
+  -Body (@{ child_id = $childId; picked_up_by = "Ibu" } | ConvertTo-Json)
+```
+
+Lalu login sebagai **orang tua** anak itu (ulangi bagian D dengan email orang tua) dan panggil timeline yang sama (langkah 4). Hasil yang seharusnya:
+- Orang tua melihat check-in, aktivitas makan beserta nama pengasuh, dan check-out.
+- Orang tua lain atau pengasuh kelas lain mendapat `404 child not found`.
+- Orang tua yang mencoba check-in mendapat `403`.
+
+Jenis aktivitas lain dan isi `details`-nya ada di [API.md](API.md#aktivitas-khusus-caregiver).
 
 ---
 

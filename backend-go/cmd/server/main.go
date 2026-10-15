@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // the distroless image has no zoneinfo; embed it
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/recover"
@@ -18,6 +19,7 @@ import (
 	"github.com/Mathatter10/daycare-app/backend-go/internal/database"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/handlers"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/repository"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/views"
 )
 
@@ -45,6 +47,12 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+
+	if cfg.AutoMigrate {
+		if err := database.Migrate(ctx, pool); err != nil {
+			return err
+		}
+	}
 
 	authSvc := auth.NewService(pool,
 		auth.NewJWTManager(cfg.JWTSecret, cfg.JWTAccessTTL),
@@ -77,6 +85,16 @@ func run() error {
 	v1.Post("/auth/refresh", authAPI.Refresh)
 	v1.Post("/auth/logout", authAPI.Logout)
 	v1.Get("/me", requireJWT, authAPI.Me)
+
+	mobile := handlers.NewMobileHandler(pool, cfg.Location)
+	caregiverOnly := middleware.RequireRole(repository.UserRoleCaregiver)
+	v1.Get("/children", requireJWT, mobile.Children)
+	v1.Get("/children/:id/timeline", requireJWT, mobile.Timeline)
+	v1.Get("/sync", requireJWT, mobile.Sync)
+	v1.Post("/attendance/check-in", requireJWT, caregiverOnly, mobile.CheckIn)
+	v1.Post("/attendance/check-out", requireJWT, caregiverOnly, mobile.CheckOut)
+	v1.Put("/activities/:id", requireJWT, caregiverOnly, mobile.PutActivity)
+	v1.Delete("/activities/:id", requireJWT, caregiverOnly, mobile.DeleteActivity)
 
 	// Admin web (templ + HTMX, HttpOnly cookie session).
 	adminAuth := &handlers.AdminAuthHandler{Auth: authSvc, CookieSecure: cfg.CookieSecure}

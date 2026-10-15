@@ -23,6 +23,12 @@ type Config struct {
 	CookieSecure     bool
 	ShutdownTimeout  time.Duration
 	DBConnectTimeout time.Duration
+
+	// Location is the daycare's time zone; it decides which calendar day an
+	// attendance or activity belongs to.
+	Location *time.Location
+	// AutoMigrate applies pending database migrations at startup.
+	AutoMigrate bool
 }
 
 // Load reads a .env file if present (local development only) and then
@@ -45,6 +51,14 @@ func Load() (*Config, error) {
 		DBConnectTimeout: getDuration("DB_CONNECT_TIMEOUT", 10*time.Second),
 	}
 	cfg.CookieSecure = getBool("COOKIE_SECURE", cfg.IsProduction())
+	cfg.AutoMigrate = getBool("AUTO_MIGRATE", true)
+
+	tz := getEnv("DAYCARE_TIMEZONE", "Asia/Jakarta")
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, fmt.Errorf("DAYCARE_TIMEZONE %q: %w", tz, err)
+	}
+	cfg.Location = loc
 
 	if err := cfg.validate(); err != nil {
 		return nil, err

@@ -198,6 +198,7 @@ type Activity struct {
 	Notes       pgtype.Text  `json:"notes"`
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
+	DeletedAt   *time.Time   `json:"deleted_at"`
 }
 
 type Attendance struct {
