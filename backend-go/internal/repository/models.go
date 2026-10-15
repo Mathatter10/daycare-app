@@ -203,7 +203,7 @@ type Activity struct {
 type Attendance struct {
 	ID             uuid.UUID     `json:"id"`
 	ChildID        uuid.UUID     `json:"child_id"`
-	AttendanceDate pgtype.Date   `json:"attendance_date"`
+	AttendanceDate time.Time     `json:"attendance_date"`
 	CheckInAt      time.Time     `json:"check_in_at"`
 	CheckInBy      uuid.UUID     `json:"check_in_by"`
 	CheckOutAt     *time.Time    `json:"check_out_at"`
@@ -218,7 +218,7 @@ type Child struct {
 	ID               uuid.UUID     `json:"id"`
 	FullName         string        `json:"full_name"`
 	Nickname         pgtype.Text   `json:"nickname"`
-	DateOfBirth      pgtype.Date   `json:"date_of_birth"`
+	DateOfBirth      time.Time     `json:"date_of_birth"`
 	Gender           pgtype.Text   `json:"gender"`
 	ClassID          uuid.NullUUID `json:"class_id"`
 	ParentID         uuid.UUID     `json:"parent_id"`

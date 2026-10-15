@@ -3,8 +3,10 @@
 package auth
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -44,4 +46,23 @@ func checkPassword(hash, password string) (bool, error) {
 	default:
 		return false, err
 	}
+}
+
+// tempAlphabet omits look-alike characters (0/O, 1/l/I) so a password read
+// aloud or copied by hand is not mistyped.
+const tempAlphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+// GenerateTempPassword returns a random 10-character password (~57 bits)
+// for accounts created or reset by an admin.
+func GenerateTempPassword() (string, error) {
+	b := make([]byte, 10)
+	max := big.NewInt(int64(len(tempAlphabet)))
+	for i := range b {
+		n, err := rand.Int(rand.Reader, max)
+		if err != nil {
+			return "", fmt.Errorf("generate password: %w", err)
+		}
+		b[i] = tempAlphabet[n.Int64()]
+	}
+	return string(b), nil
 }

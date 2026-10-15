@@ -2,7 +2,18 @@
 
 Panduan ini untuk backend Go di folder `backend-go/`.
 
-> **Status saat ini (Sprint 2):** sudah ada login untuk aplikasi mobile (JWT, lihat [API.md](API.md)) dan login admin web di `/admin`. Fitur data (anak, kelas, absensi, aktivitas) **belum ada**, dashboard admin masih halaman kosong.
+> **Status saat ini (Sprint 3):** sudah ada login aplikasi mobile (JWT, lihat [API.md](API.md)) dan admin web di `/admin` untuk mengelola **kelas, anak, pengasuh, dan orang tua**. Absensi dan aktivitas harian **belum ada**.
+
+## Alur awal memakai admin web
+
+Setelah deploy dan login sebagai admin (langkah 6), isi data dengan urutan ini:
+
+1. **Pengasuh** → *Tambah pengasuh*. Kata sandi sementara muncul **sekali**; catat dan berikan ke pengasuh untuk login di aplikasi mobile.
+2. **Kelas** → *Tambah kelas*, centang pengasuh yang bertanggung jawab.
+3. **Orang Tua** → *Tambah orang tua* (kata sandi sementara juga muncul sekali).
+4. **Anak** → *Tambah anak*, pilih kelas, isi **email orang tua** dari langkah 3.
+
+Lupa kata sandi? Klik **Reset sandi** di baris akun itu. **Nonaktifkan** akun membuat user langsung keluar dari aplikasi. Data anak tidak bisa dihapus, hanya dinonaktifkan, supaya riwayatnya tetap tersimpan.
 
 Arsitektur deploy yang disarankan untuk MVP:
 

@@ -15,7 +15,7 @@ import (
 
 const msgInvalidLogin = "Email atau kata sandi salah."
 
-// AdminAuthHandler serves the admin web login, logout and dashboard.
+// AdminAuthHandler serves the admin web login and logout.
 type AdminAuthHandler struct {
 	Auth         *auth.Service
 	CookieSecure bool
@@ -82,12 +82,6 @@ func (h *AdminAuthHandler) Logout(c fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusNoContent)
 	}
 	return c.Redirect().Status(fiber.StatusSeeOther).To("/admin/login")
-}
-
-// Dashboard is the admin landing page.
-// GET /admin
-func (h *AdminAuthHandler) Dashboard(c fiber.Ctx) error {
-	return views.Render(c, views.DashboardPage(middleware.CurrentUser(c).FullName))
 }
 
 func (h *AdminAuthHandler) setSessionCookie(c fiber.Ctx, value string, expires time.Time) {

@@ -7,6 +7,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -45,6 +46,33 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const dashboardCounts = `-- name: DashboardCounts :one
+SELECT
+    (SELECT count(*) FROM children WHERE is_active)::int                         AS children,
+    (SELECT count(*) FROM classes)::int                                          AS classes,
+    (SELECT count(*) FROM users WHERE role = 'caregiver' AND is_active)::int     AS caregivers,
+    (SELECT count(*) FROM users WHERE role = 'parent' AND is_active)::int        AS parents
+`
+
+type DashboardCountsRow struct {
+	Children   int32 `json:"children"`
+	Classes    int32 `json:"classes"`
+	Caregivers int32 `json:"caregivers"`
+	Parents    int32 `json:"parents"`
+}
+
+func (q *Queries) DashboardCounts(ctx context.Context) (DashboardCountsRow, error) {
+	row := q.db.QueryRow(ctx, dashboardCounts)
+	var i DashboardCountsRow
+	err := row.Scan(
+		&i.Children,
+		&i.Classes,
+		&i.Caregivers,
+		&i.Parents,
 	)
 	return i, err
 }
@@ -91,4 +119,174 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listUserOptions = `-- name: ListUserOptions :many
+SELECT id, full_name, email FROM users
+WHERE role = $1 AND is_active
+ORDER BY full_name
+`
+
+type ListUserOptionsRow struct {
+	ID       uuid.UUID `json:"id"`
+	FullName string    `json:"full_name"`
+	Email    string    `json:"email"`
+}
+
+func (q *Queries) ListUserOptions(ctx context.Context, role UserRole) ([]ListUserOptionsRow, error) {
+	rows, err := q.db.Query(ctx, listUserOptions, role)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserOptionsRow{}
+	for rows.Next() {
+		var i ListUserOptionsRow
+		if err := rows.Scan(&i.ID, &i.FullName, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsers = `-- name: ListUsers :many
+
+SELECT
+    u.id, u.email, u.full_name, u.phone, u.role, u.is_active, u.created_at,
+    COALESCE((SELECT string_agg(c.name, ', ' ORDER BY c.name)
+              FROM class_caregivers cc JOIN classes c ON c.id = cc.class_id
+              WHERE cc.caregiver_id = u.id), '')::text AS class_names,
+    COALESCE((SELECT string_agg(ch.full_name, ', ' ORDER BY ch.full_name)
+              FROM children ch
+              WHERE ch.parent_id = u.id AND ch.is_active), '')::text AS child_names
+FROM users u
+WHERE u.role = $1::user_role
+  AND ($2::uuid IS NULL OR u.id = $2)
+  AND ($3::text = ''
+       OR u.full_name ILIKE '%' || $3 || '%'
+       OR u.email ILIKE '%' || $3 || '%')
+ORDER BY u.is_active DESC, u.full_name
+LIMIT 500
+`
+
+type ListUsersParams struct {
+	Role   UserRole      `json:"role"`
+	ID     uuid.NullUUID `json:"id"`
+	Search string        `json:"search"`
+}
+
+type ListUsersRow struct {
+	ID         uuid.UUID   `json:"id"`
+	Email      string      `json:"email"`
+	FullName   string      `json:"full_name"`
+	Phone      pgtype.Text `json:"phone"`
+	Role       UserRole    `json:"role"`
+	IsActive   bool        `json:"is_active"`
+	CreatedAt  time.Time   `json:"created_at"`
+	ClassNames string      `json:"class_names"`
+	ChildNames string      `json:"child_names"`
+}
+
+// Admin master data ----------------------------------------------------------
+// Lists caregivers or parents with their linked classes / children. Pass id
+// to fetch a single row in the same shape (for re-rendering one table row).
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUsers, arg.Role, arg.ID, arg.Search)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersRow{}
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.FullName,
+			&i.Phone,
+			&i.Role,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.ClassNames,
+			&i.ChildNames,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setUserActive = `-- name: SetUserActive :execrows
+UPDATE users SET is_active = $2
+WHERE id = $1 AND role = $3
+`
+
+type SetUserActiveParams struct {
+	ID       uuid.UUID `json:"id"`
+	IsActive bool      `json:"is_active"`
+	Role     UserRole  `json:"role"`
+}
+
+func (q *Queries) SetUserActive(ctx context.Context, arg SetUserActiveParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserActive, arg.ID, arg.IsActive, arg.Role)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setUserPassword = `-- name: SetUserPassword :execrows
+UPDATE users SET password_hash = $2
+WHERE id = $1 AND role = $3
+`
+
+type SetUserPasswordParams struct {
+	ID           uuid.UUID `json:"id"`
+	PasswordHash string    `json:"-"`
+	Role         UserRole  `json:"role"`
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserPassword, arg.ID, arg.PasswordHash, arg.Role)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateUserProfile = `-- name: UpdateUserProfile :execrows
+UPDATE users SET email = $2, full_name = $3, phone = $4
+WHERE id = $1 AND role = $5
+`
+
+type UpdateUserProfileParams struct {
+	ID       uuid.UUID   `json:"id"`
+	Email    string      `json:"email"`
+	FullName string      `json:"full_name"`
+	Phone    pgtype.Text `json:"phone"`
+	Role     UserRole    `json:"role"`
+}
+
+// The role condition stops these admin queries from touching accounts of
+// another role (e.g. editing an admin through the parents page).
+func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserProfile,
+		arg.ID,
+		arg.Email,
+		arg.FullName,
+		arg.Phone,
+		arg.Role,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

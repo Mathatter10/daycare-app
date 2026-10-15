@@ -1,0 +1,115 @@
+package views
+
+import "github.com/Mathatter10/daycare-app/backend-go/internal/repository"
+
+type UserForm struct {
+	ID       string // empty when creating
+	FullName string
+	Email    string
+	Phone    string
+	Errors   FormErrors
+}
+
+templ UsersPage(p Page, ri RoleInfo, rows []repository.ListUsersRow, search string) {
+	@AdminLayout(p) {
+		@PageHeader(ri.Title, "Akun "+ri.Singular+" untuk login di aplikasi mobile.") {
+			@AddButton(ri.URL("/new"), "Tambah "+ri.Singular)
+		}
+		<div class="mb-3">
+			<input
+				type="search"
+				name="q"
+				value={ search }
+				placeholder="Cari nama atau email…"
+				hx-get={ ri.URL("") }
+				hx-trigger="input changed delay:300ms, search"
+				hx-target="#user-rows"
+				hx-push-url="true"
+				class="w-full max-w-sm rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand focus:ring-2 focus:ring-brand/30 focus:outline-none"
+			/>
+		</div>
+		@Table([]string{"Nama", "Kontak", ri.Related, "Status", ""}, "user-rows") {
+			@UserRows(ri, rows)
+		}
+	}
+}
+
+templ UserRows(ri RoleInfo, rows []repository.ListUsersRow) {
+	for _, r := range rows {
+		@UserRow(ri, r, false)
+	}
+	@EmptyRow(5, "Tidak ada data "+ri.Singular+".")
+}
+
+templ UserRow(ri RoleInfo, r repository.ListUsersRow, oob bool) {
+	<tr
+		id={ "user-" + r.ID.String() }
+		class={ templ.KV("opacity-60", !r.IsActive) }
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		<td class="px-4 py-3 font-semibold">{ r.FullName }</td>
+		<td class="px-4 py-3">
+			<p>{ r.Email }</p>
+			<p class="text-xs text-gray-500">{ text(r.Phone) }</p>
+		</td>
+		<td class="px-4 py-3">
+			if related := userRelated(ri, r); related == "" {
+				<span class="text-gray-400">-</span>
+			} else {
+				{ related }
+			}
+		</td>
+		<td class="px-4 py-3">
+			@StatusBadge(r.IsActive)
+		</td>
+		<td class="whitespace-nowrap px-4 py-3 text-right">
+			@RowButton("Ubah", false, templ.Attributes{"hx-get": ri.URL("/" + r.ID.String() + "/edit"), "hx-target": "#modal"})
+			@RowButton("Reset sandi", false, templ.Attributes{"hx-post": ri.URL("/" + r.ID.String() + "/password"), "hx-confirm": "Buat kata sandi baru untuk " + r.FullName + "? Kata sandi lama langsung tidak berlaku.", "hx-target": "#modal"})
+			if r.IsActive {
+				@RowButton("Nonaktifkan", true, templ.Attributes{"hx-post": ri.URL("/" + r.ID.String() + "/active"), "hx-vals": `{"active":"false"}`, "hx-confirm": "Nonaktifkan " + r.FullName + "? Akun ini akan langsung keluar dari aplikasi.", "hx-target": "closest tr", "hx-swap": "outerHTML"})
+			} else {
+				@RowButton("Aktifkan", false, templ.Attributes{"hx-post": ri.URL("/" + r.ID.String() + "/active"), "hx-vals": `{"active":"true"}`, "hx-target": "closest tr", "hx-swap": "outerHTML"})
+			}
+		</td>
+	</tr>
+}
+
+templ UserFormModal(ri RoleInfo, f UserForm) {
+	@Modal(userFormTitle(ri, f)) {
+		<form
+			if f.ID == "" {
+				hx-post={ ri.URL("") }
+			} else {
+				hx-post={ ri.URL("/" + f.ID) }
+			}
+			hx-target="#modal"
+			hx-disabled-elt="find button[type=submit]"
+			class="space-y-4"
+		>
+			@FormError(f.Errors)
+			@TextField("Nama lengkap", "full_name", "text", f.FullName, true, f.Errors, templ.Attributes{"maxlength": "100"})
+			@TextField("Email", "email", "email", f.Email, true, f.Errors, templ.Attributes{"maxlength": "254"})
+			@TextField("No. HP", "phone", "tel", f.Phone, false, f.Errors, templ.Attributes{"maxlength": "30", "placeholder": "08…"})
+			if f.ID == "" {
+				<p class="text-xs text-gray-500">Kata sandi sementara akan dibuat otomatis dan ditampilkan setelah disimpan.</p>
+			}
+			@FormActions("Simpan")
+		</form>
+	}
+}
+
+func userFormTitle(ri RoleInfo, f UserForm) string {
+	if f.ID == "" {
+		return "Tambah " + ri.Singular
+	}
+	return "Ubah " + ri.Singular
+}
+
+func userRelated(ri RoleInfo, r repository.ListUsersRow) string {
+	if ri.Role == repository.UserRoleCaregiver {
+		return r.ClassNames
+	}
+	return r.ChildNames
+}

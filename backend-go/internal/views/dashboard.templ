@@ -1,24 +1,26 @@
 package views
 
-templ DashboardPage(adminName string) {
-	@Layout("Dashboard") {
-		<header class="bg-brand text-white">
-			<div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-				<span class="text-lg font-bold">🍼 Daycare Admin</span>
-				<div class="flex items-center gap-4 text-sm">
-					<span>{ adminName }</span>
-					<button
-						hx-post="/admin/logout"
-						class="rounded-lg bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25"
-					>
-						Keluar
-					</button>
-				</div>
-			</div>
-		</header>
-		<main class="mx-auto max-w-6xl px-4 py-8">
-			<h1 class="text-2xl font-bold">Selamat datang, { adminName }</h1>
-			<p class="mt-1 text-sm text-gray-500">Pengelolaan anak, kelas, dan staf akan tersedia di sprint berikutnya.</p>
-		</main>
+import (
+	"strconv"
+
+	"github.com/Mathatter10/daycare-app/backend-go/internal/repository"
+)
+
+templ DashboardPage(p Page, counts repository.DashboardCountsRow) {
+	@AdminLayout(p) {
+		@PageHeader("Selamat datang, "+p.AdminName, "Ringkasan data daycare.")
+		<div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+			@statTile("/admin/children", "Anak aktif", counts.Children)
+			@statTile("/admin/classes", "Kelas", counts.Classes)
+			@statTile("/admin/caregivers", "Pengasuh aktif", counts.Caregivers)
+			@statTile("/admin/parents", "Orang tua aktif", counts.Parents)
+		</div>
 	}
+}
+
+templ statTile(href, label string, value int32) {
+	<a href={ templ.SafeURL(href) } class="rounded-lg bg-white p-5 shadow-card hover:ring-2 hover:ring-brand/30">
+		<p class="text-sm text-gray-500">{ label }</p>
+		<p class="mt-1 text-3xl font-bold">{ strconv.Itoa(int(value)) }</p>
+	</a>
 }

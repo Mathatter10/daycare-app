@@ -1,0 +1,104 @@
+package views
+
+import (
+	"strconv"
+
+	"github.com/Mathatter10/daycare-app/backend-go/internal/repository"
+)
+
+type ClassForm struct {
+	ID           string // empty when creating
+	Name         string
+	Description  string
+	CaregiverIDs map[string]bool
+	Errors       FormErrors
+}
+
+templ ClassesPage(p Page, rows []repository.ListClassesRow) {
+	@AdminLayout(p) {
+		@PageHeader("Kelas", "Kelompok anak dan pengasuh yang bertanggung jawab.") {
+			@AddButton("/admin/classes/new", "Tambah kelas")
+		}
+		@Table([]string{"Nama kelas", "Pengasuh", "Anak aktif", ""}, "class-rows") {
+			for _, r := range rows {
+				@ClassRow(r, false)
+			}
+			@EmptyRow(4, "Belum ada kelas.")
+		}
+	}
+}
+
+templ ClassRow(r repository.ListClassesRow, oob bool) {
+	<tr
+		id={ "class-" + r.ID.String() }
+		if oob {
+			hx-swap-oob="true"
+		}
+	>
+		<td class="px-4 py-3">
+			<p class="font-semibold">{ r.Name }</p>
+			<p class="text-xs text-gray-500">{ text(r.Description) }</p>
+		</td>
+		<td class="px-4 py-3">
+			if r.CaregiverNames == "" {
+				<span class="text-gray-400">Belum ada</span>
+			} else {
+				{ r.CaregiverNames }
+			}
+		</td>
+		<td class="px-4 py-3">{ strconv.Itoa(int(r.ChildCount)) }</td>
+		<td class="whitespace-nowrap px-4 py-3 text-right">
+			@RowButton("Ubah", false, templ.Attributes{"hx-get": "/admin/classes/" + r.ID.String() + "/edit", "hx-target": "#modal"})
+			@RowButton("Hapus", true, templ.Attributes{"hx-delete": "/admin/classes/" + r.ID.String(), "hx-confirm": "Hapus kelas " + r.Name + "? Anak di kelas ini akan menjadi tanpa kelas.", "hx-target": "closest tr", "hx-swap": "outerHTML"})
+		</td>
+	</tr>
+}
+
+templ ClassFormModal(f ClassForm, caregivers []repository.ListUserOptionsRow) {
+	@Modal(classFormTitle(f)) {
+		<form
+			if f.ID == "" {
+				hx-post="/admin/classes"
+			} else {
+				hx-post={ "/admin/classes/" + f.ID }
+			}
+			hx-target="#modal"
+			hx-disabled-elt="find button[type=submit]"
+			class="space-y-4"
+		>
+			@FormError(f.Errors)
+			@TextField("Nama kelas", "name", "text", f.Name, true, f.Errors, templ.Attributes{"maxlength": "100", "placeholder": "mis. Bayi (0-1 th)"})
+			@TextArea("Keterangan", "description", f.Description, f.Errors)
+			<fieldset>
+				<legend class="text-sm font-semibold">Pengasuh</legend>
+				if len(caregivers) == 0 {
+					<p class="mt-1 text-sm text-gray-400">Belum ada pengasuh aktif. Tambahkan di menu Pengasuh.</p>
+				} else {
+					<div class="mt-1 grid max-h-48 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+						for _, cg := range caregivers {
+							<label class="flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-gray-50">
+								<input
+									type="checkbox"
+									name="caregiver_ids"
+									value={ cg.ID.String() }
+									checked?={ f.CaregiverIDs[cg.ID.String()] }
+									class="h-4 w-4 accent-brand"
+								/>
+								{ cg.FullName }
+							</label>
+						}
+					</div>
+				}
+				@fieldError(f.Errors["caregiver_ids"])
+			</fieldset>
+			@FormActions("Simpan")
+		</form>
+	}
+}
+
+func classFormTitle(f ClassForm) string {
+	if f.ID == "" {
+		return "Tambah kelas"
+	}
+	return "Ubah kelas"
+}

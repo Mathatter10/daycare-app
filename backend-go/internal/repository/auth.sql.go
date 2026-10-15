@@ -78,6 +78,16 @@ func (q *Queries) DeleteWebSession(ctx context.Context, tokenHash string) error 
 	return err
 }
 
+const deleteWebSessionsForUser = `-- name: DeleteWebSessionsForUser :exec
+DELETE FROM web_sessions
+WHERE user_id = $1
+`
+
+func (q *Queries) DeleteWebSessionsForUser(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteWebSessionsForUser, userID)
+	return err
+}
+
 const getActiveSessionUser = `-- name: GetActiveSessionUser :one
 SELECT u.id, u.email, u.password_hash, u.full_name, u.phone, u.role, u.is_active, u.created_at, u.updated_at
 FROM web_sessions s

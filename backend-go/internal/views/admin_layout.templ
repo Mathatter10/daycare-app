@@ -1,0 +1,51 @@
+package views
+
+// AdminLayout is the shell for every signed-in admin page: top bar, nav and
+// the #modal container that create/edit forms are swapped into.
+templ AdminLayout(p Page) {
+	@Layout(p.Title) {
+		<header class="bg-brand text-white">
+			<div class="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
+				<a href="/admin" class="text-lg font-bold">🍼 Daycare Admin</a>
+				<div class="flex items-center gap-3 text-sm">
+					<span class="hidden sm:inline">{ p.AdminName }</span>
+					<button
+						hx-post="/admin/logout"
+						class="rounded-lg bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25"
+					>
+						Keluar
+					</button>
+				</div>
+			</div>
+			<nav class="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 text-sm">
+				@navLink("/admin", "Dashboard", p.Nav == "dashboard")
+				@navLink("/admin/children", "Anak", p.Nav == "children")
+				@navLink("/admin/classes", "Kelas", p.Nav == "classes")
+				@navLink("/admin/caregivers", "Pengasuh", p.Nav == "caregivers")
+				@navLink("/admin/parents", "Orang Tua", p.Nav == "parents")
+			</nav>
+		</header>
+		<main class="mx-auto max-w-6xl px-4 py-6">
+			{ children... }
+		</main>
+		<div id="modal"></div>
+		<script>
+			function closeModal() { document.getElementById("modal").innerHTML = ""; }
+			document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+			document.addEventListener("htmx:responseError", function (e) {
+				alert("Terjadi kesalahan (" + e.detail.xhr.status + "). Muat ulang halaman lalu coba lagi.");
+			});
+		</script>
+	}
+}
+
+templ navLink(href, label string, active bool) {
+	<a
+		href={ templ.SafeURL(href) }
+		class={ "whitespace-nowrap rounded-t-lg px-3 py-2 font-semibold",
+			templ.KV("bg-gray-50 text-brand", active),
+			templ.KV("text-white/80 hover:text-white", !active) }
+	>
+		{ label }
+	</a>
+}

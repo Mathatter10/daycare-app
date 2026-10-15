@@ -18,6 +18,7 @@ import (
 	"github.com/Mathatter10/daycare-app/backend-go/internal/database"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/handlers"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/views"
 )
 
 func main() {
@@ -83,7 +84,34 @@ func run() error {
 	admin.Get("/login", adminAuth.LoginPage)
 	admin.Post("/login", middleware.LoginRateLimit(), adminAuth.Login)
 	admin.Post("/logout", adminAuth.Logout)
-	admin.Get("/", requireAdmin, adminAuth.Dashboard)
+
+	adm := handlers.NewAdminHandler(pool)
+	admin.Get("/", requireAdmin, adm.Dashboard)
+
+	admin.Get("/classes", requireAdmin, adm.Classes)
+	admin.Get("/classes/new", requireAdmin, adm.NewClass)
+	admin.Post("/classes", requireAdmin, adm.CreateClass)
+	admin.Get("/classes/:id/edit", requireAdmin, adm.EditClass)
+	admin.Post("/classes/:id", requireAdmin, adm.UpdateClass)
+	admin.Delete("/classes/:id", requireAdmin, adm.DeleteClass)
+
+	admin.Get("/children", requireAdmin, adm.Children)
+	admin.Get("/children/new", requireAdmin, adm.NewChild)
+	admin.Post("/children", requireAdmin, adm.CreateChild)
+	admin.Get("/children/:id/edit", requireAdmin, adm.EditChild)
+	admin.Post("/children/:id", requireAdmin, adm.UpdateChild)
+	admin.Post("/children/:id/active", requireAdmin, adm.SetChildActive)
+
+	for _, ri := range []views.RoleInfo{views.CaregiverRole, views.ParentRole} {
+		base := "/" + ri.Path
+		admin.Get(base, requireAdmin, adm.Users(ri))
+		admin.Get(base+"/new", requireAdmin, adm.NewUser(ri))
+		admin.Post(base, requireAdmin, adm.CreateUser(ri))
+		admin.Get(base+"/:id/edit", requireAdmin, adm.EditUser(ri))
+		admin.Post(base+"/:id", requireAdmin, adm.UpdateUser(ri))
+		admin.Post(base+"/:id/active", requireAdmin, adm.SetUserActive(ri))
+		admin.Post(base+"/:id/password", requireAdmin, adm.ResetUserPassword(ri))
+	}
 
 	app.Get("/", func(c fiber.Ctx) error {
 		return c.Redirect().Status(fiber.StatusSeeOther).To("/admin")
@@ -141,16 +169,22 @@ func errorHandler(c fiber.Ctx, err error) error {
 
 // requestLogger logs method, route, status and latency only — never bodies,
 // query strings or headers, to keep PII and credentials out of logs.
+// Handler errors are rendered here (not after) so the logged status is the
+// one the client actually receives.
 func requestLogger() fiber.Handler {
 	return func(c fiber.Ctx) error {
 		start := time.Now()
-		err := c.Next()
+		if err := c.Next(); err != nil {
+			if hErr := c.App().ErrorHandler(c, err); hErr != nil {
+				_ = c.SendStatus(fiber.StatusInternalServerError)
+			}
+		}
 		slog.Info("request",
 			"method", c.Method(),
 			"route", c.Route().Path,
 			"status", c.Response().StatusCode(),
 			"latency_ms", time.Since(start).Milliseconds(),
 		)
-		return err
+		return nil
 	}
 }

@@ -45,3 +45,7 @@ WHERE token_hash = $1;
 -- name: DeleteExpiredWebSessions :exec
 DELETE FROM web_sessions
 WHERE expires_at < now();
+
+-- name: DeleteWebSessionsForUser :exec
+DELETE FROM web_sessions
+WHERE user_id = $1;
