@@ -8,7 +8,7 @@ These choices are fixed. Do not substitute alternatives.
 1.  **Backend:** Go with `gofiber/fiber` **v3** for routing (handlers take `fiber.Ctx`). No Gin, Echo, Chi or `net/http` routers.
 2.  **Database access:** `sqlc` (pgx/v5 driver). Write SQL in `backend-go/db/queries/`, run `sqlc generate`, use the generated code in `internal/repository/`. No GORM or other ORMs.
 3.  **Admin PWA:** HTML rendered with `a-h/templ` components (`internal/views/*.templ`, run `go tool templ generate`), enhanced with HTMX and Tailwind CSS. No `html/template`, React or Vue.
-4.  **Mobile App:** Flutter. Use `camera_awesome` for photo/video capture and `isar` as the local database for offline-first capabilities.
+4.  **Mobile App:** Flutter, in `mobile/`. **One app for both roles**: the UI switches on the logged-in user's role (caregiver: fast logging; parent: timeline). Use `camerawesome` for photo/video capture and **`isar_community`** (the maintained Isar fork, same API) as the local database for offline-first capabilities. Writes go to Isar plus an outbox first, then sync to the API (`docs/API.md`, "Sinkronisasi offline-first").
 5.  **Database:** PostgreSQL (Supabase/Neon). Schema changes go in goose migrations in `backend-go/migrations/`.
 
 ## Coding Guidelines
