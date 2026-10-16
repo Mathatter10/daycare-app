@@ -14,6 +14,7 @@ class FakeApi extends ApiClient {
   FakeApi() : super(store: AuthStore(), onSessionExpired: () {});
 
   final calls = <String>[];
+  final syncCursors = <String?>[];
   final failWith = <String, ApiException>{};
   Map<String, dynamic> syncResponse = _syncBody(children: []);
 
@@ -43,6 +44,7 @@ class FakeApi extends ApiClient {
   @override
   Future<Map<String, dynamic>> sync({String? activitiesCursor, String? attendanceCursor}) async {
     calls.add('sync');
+    syncCursors.add(activitiesCursor);
     final err = failWith['sync'];
     if (err != null) throw err;
     return syncResponse;
@@ -166,6 +168,62 @@ void main() {
     expect(await outboxCount(), 0);
     final failed = await isar.outboxEntrys.where().findFirst();
     expect(failed!.lastError, contains('portion'));
+  });
+
+  test('"Coba lagi" resends rejected writes once the server accepts them', () async {
+    await actions.logActivity(childId: 'c1', type: 'eat', details: {'portion': 'half'});
+    api.failWith['putActivity'] = ApiException('Not Found', status: 404);
+    await sync.syncNow();
+    expect(await outboxCount(failed: true), 1);
+
+    api.failWith.clear();
+    api.calls.clear();
+    await sync.retryFailed();
+
+    expect(api.calls, ['putActivity', 'sync']);
+    expect(await outboxCount(failed: true), 0);
+    expect(await outboxCount(), 0);
+  });
+
+  test('a newer edit replaces a rejected one, so a retry cannot overwrite it', () async {
+    final id = await actions.logActivity(childId: 'c1', type: 'eat', details: {'portion': 'half'});
+    final other = await actions.logActivity(childId: 'c1', type: 'toilet', details: {'kind': 'wet'});
+    api.failWith['putActivity'] = ApiException('details.portion must be one of …', status: 422);
+    await sync.syncNow();
+    expect(await outboxCount(failed: true), 2);
+
+    await actions.deleteActivity(id);
+
+    final failed = await isar.outboxEntrys.filter().failedEqualTo(true).findAll();
+    expect(failed.map((e) => e.payload), [contains(other)], reason: 'only the unrelated rejection is left');
+    expect(await outboxCount(), 1, reason: 'the delete is queued');
+  });
+
+  test('a child that becomes visible gets its earlier history (cursors restart)', () async {
+    await sync.syncNow(); // c1 known, cursor a1 stored
+    final earlier = {
+      'id': 'act-old',
+      'child_id': 'c2',
+      'type': 'eat',
+      'started_at': '2026-10-16T02:00:00Z',
+      'ended_at': null,
+      'details': {'portion': 'all'},
+      'notes': null,
+      'caregiver_name': 'Nadia',
+      'deleted_at': null,
+    };
+    api.syncResponse = _syncBody(children: [_child('c1'), _child('c2')], activities: [earlier]);
+    api.syncCursors.clear();
+
+    await sync.syncNow();
+
+    expect(api.syncCursors, ['a1', null], reason: 'second request starts over without cursors');
+    expect(await isar.childEntitys.getById('c2'), isNotNull);
+    expect(await isar.activityEntitys.getById('act-old'), isNotNull);
+
+    api.syncCursors.clear();
+    await sync.syncNow();
+    expect(api.syncCursors, ['a1'], reason: 'no restart once the child is known');
   });
 
   test('editing an activity someone else deleted is dropped quietly', () async {

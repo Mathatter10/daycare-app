@@ -61,6 +61,16 @@ class SyncService {
     _debounce = Timer(const Duration(milliseconds: 400), syncNow);
   }
 
+  /// Queues every write the server rejected once more ("Coba lagi"), e.g.
+  /// after an admin fixed the cause, in their original order.
+  Future<void> retryFailed() async {
+    await _isar.writeTxn(() async {
+      final failed = await _isar.outboxEntrys.filter().failedEqualTo(true).findAll();
+      await _isar.outboxEntrys.putAll([for (final e in failed) e..failed = false]);
+    });
+    await syncNow();
+  }
+
   void dispose() => _debounce?.cancel();
 
   Future<void> _run() async {
@@ -172,6 +182,15 @@ class SyncService {
     var more = true;
     while (more) {
       final res = await _api.sync(activitiesCursor: state.activitiesCursor, attendanceCursor: state.attendanceCursor);
+      if (await _hasNewChild(state, res)) {
+        // A child just became visible (new class, newly linked parent). Its
+        // history is older than our cursors, so start over from the last
+        // 14 days; upserts make the repeat harmless.
+        state
+          ..activitiesCursor = null
+          ..attendanceCursor = null;
+        continue;
+      }
       final activities = res['activities'] as Map<String, dynamic>;
       final attendance = res['attendance'] as Map<String, dynamic>;
 
@@ -187,6 +206,12 @@ class SyncService {
       });
       more = activities['has_more'] == true || attendance['has_more'] == true;
     }
+  }
+
+  Future<bool> _hasNewChild(SyncStateEntity state, Map<String, dynamic> res) async {
+    if (state.activitiesCursor == null && state.attendanceCursor == null) return false;
+    final known = (await _isar.childEntitys.where().findAll()).map((c) => c.id).toSet();
+    return (res['children'] as List).any((c) => !known.contains((c as Map<String, dynamic>)['id']));
   }
 
   /// The server sends the complete list; anything else is no longer

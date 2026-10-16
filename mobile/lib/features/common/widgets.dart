@@ -46,7 +46,8 @@ class SyncBanner extends ConsumerWidget {
     final counts = ref.watch(outboxCountsProvider).value ?? (pending: 0, failed: 0);
     String? text;
     Color color = AppColors.muted;
-    if (counts.failed > 0) {
+    final rejected = counts.failed > 0;
+    if (rejected) {
       text = '${counts.failed} data ditolak server. Hubungi admin bila berulang.';
       color = AppColors.medical;
     } else if (status.offline) {
@@ -69,6 +70,12 @@ class SyncBanner extends ConsumerWidget {
             Expanded(
               child: Text(text, style: TextStyle(color: color, fontSize: 13)),
             ),
+            if (rejected)
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: color, minimumSize: const Size(48, 48)),
+                onPressed: status.syncing ? null : () => ref.read(syncServiceProvider).retryFailed(),
+                child: const Text('COBA LAGI', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
           ],
         ),
       ),

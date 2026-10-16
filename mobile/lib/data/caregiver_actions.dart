@@ -20,12 +20,25 @@ class CaregiverActions {
   final AppUser _user;
   static const _uuid = Uuid();
 
-  Future<void> _enqueue(String kind, Map<String, dynamic> payload) => _isar.outboxEntrys.put(
-    OutboxEntry()
-      ..kind = kind
-      ..payload = jsonEncode(payload)
-      ..createdAt = DateTime.now(),
-  );
+  Future<void> _enqueue(String kind, Map<String, dynamic> payload) async {
+    if (kind == OutboxKind.putActivity || kind == OutboxKind.deleteActivity) {
+      // A PUT carries the whole activity and a DELETE ends it, so an older
+      // rejected write for the same activity is obsolete. Dropping it keeps
+      // "Coba lagi" from replaying it over this newer state.
+      await _isar.outboxEntrys
+          .filter()
+          .failedEqualTo(true)
+          .group((q) => q.kindEqualTo(OutboxKind.putActivity).or().kindEqualTo(OutboxKind.deleteActivity))
+          .payloadContains('"id":"${payload['id']}"')
+          .deleteAll();
+    }
+    await _isar.outboxEntrys.put(
+      OutboxEntry()
+        ..kind = kind
+        ..payload = jsonEncode(payload)
+        ..createdAt = DateTime.now(),
+    );
+  }
 
   Future<void> checkIn(String childId) async {
     final now = DateTime.now();
