@@ -1,4 +1,4 @@
-# Panduan Uji Coba (Sprint 1–5)
+# Panduan Uji Coba (Sprint 1–6)
 
 Fitur yang bisa dicoba sekarang:
 
@@ -6,8 +6,9 @@ Fitur yang bisa dicoba sekarang:
 |---|---|
 | **Admin web** (`/admin`) | Login, dashboard, kelola kelas, pengasuh, orang tua, dan anak |
 | **API mobile** (`/api/v1`) | Login, daftar anak, check-in/out, catat aktivitas, timeline orang tua, sync |
+| **Aplikasi mobile** (Android) | Login pengasuh/orang tua, catat absensi & aktivitas, foto, timeline, mode offline |
 
-Belum ada: aplikasi mobile Flutter. Foto/video bisa dicoba setelah R2 dikonfigurasi ([DEPLOYMENT.md](DEPLOYMENT.md) bagian 7); push notification baru bisa diterima setelah aplikasi Flutter ada. API mobile untuk sementara dicoba lewat PowerShell.
+Foto/video bisa dicoba setelah R2 dikonfigurasi ([DEPLOYMENT.md](DEPLOYMENT.md) bagian 7). Push notification belum bisa diterima: aplikasi belum mendaftarkan token FCM. Bagian D–F mencoba API langsung lewat PowerShell; bagian G mencoba aplikasinya.
 
 Semua perintah dijalankan di **PowerShell** dari folder `backend-go`:
 
@@ -199,7 +200,79 @@ Yang seharusnya terjadi:
 - Foto juga muncul di timeline anak (`media` di langkah 4 bagian E).
 - Di dashboard Cloudflare R2, bucket `daycare-media` berisi folder `children/<id anak>/`.
 
-Push notification belum bisa diterima sampai aplikasi Flutter dibuat, karena butuh token FCM dari HP sungguhan.
+Push notification belum bisa diterima karena aplikasi mobile belum mendaftarkan token FCM.
+
+---
+
+## G. Coba aplikasi mobile (Sprint 6)
+
+Butuh data dari bagian C: satu akun **pengasuh** yang punya kelas berisi anak, dan akun **orang tua** anak tersebut.
+
+### 1. Pasang aplikasi di HP Android
+
+Cara termudah: pakai APK yang sudah jadi.
+
+1. Build APK (sekali, dari folder `mobile`):
+   ```powershell
+   cd D:\Project\daycare-app\mobile
+   flutter build apk --debug
+   ```
+   Hasilnya `mobile\build\app\outputs\flutter-apk\app-debug.apk`.
+2. Kirim file itu ke HP (kabel USB, Google Drive, atau WhatsApp ke diri sendiri), buka, lalu izinkan **"Instal aplikasi tidak dikenal"** bila diminta.
+
+Secara bawaan aplikasi memakai backend **Render**. Mau memakai server di komputer sendiri (bagian A)? HP dan komputer harus di Wi-Fi yang sama:
+
+```powershell
+ipconfig                      # catat "IPv4 Address", mis. 192.168.1.10
+flutter build apk --debug --dart-define=API_BASE_URL=http://192.168.1.10:8080
+```
+
+Di emulator Android, alamat komputer adalah `http://10.0.2.2:8080`. Kalau HP tersambung kabel dengan USB debugging aktif, `flutter run --dart-define=...` langsung memasang dan menjalankan aplikasi.
+
+### 2. Skenario pengasuh
+
+Login dengan email dan kata sandi pengasuh. Request pertama ke Render bisa butuh ±1 menit (server bangun dari tidur).
+
+| # | Langkah | Yang seharusnya terjadi |
+|---|---|---|
+| 1 | Login. | Muncul **Anak Hari Ini**: kartu tiap anak di kelas pengasuh, status *Belum datang*. Anak beralergi bertanda ⚠. |
+| 2 | Ketuk kartu anak → **CHECK-IN SEKARANG**. | Muncul pesan *"✅ … check-in 08.15"*; status kartu jadi *Hadir sejak …*. |
+| 3 | Ketuk kartu lagi → **Makan** → pilih porsi. | Tersimpan langsung, tanpa mengetik. Pesan memiliki tombol **BATALKAN**. |
+| 4 | Coba **BATALKAN** pada pesan berikutnya. | Aktivitas itu terhapus. |
+| 5 | **Tidur**, tunggu sebentar, lalu ketuk kartu → **Bangun**. | Kartu menampilkan *Tidur sejak …*; setelah bangun muncul lama tidurnya. |
+| 6 | **Toilet** dan **Main** → pilih salah satu chip. | Tercatat dengan pesan konfirmasi. |
+| 7 | **Kesehatan** → *Suhu*, atur angka, **SIMPAN & KIRIM**. Coba juga *Cedera* tanpa keterangan. | Suhu tersimpan. *Cedera* tidak bisa disimpan sebelum keterangan diisi. |
+| 8 | **Foto** → izinkan kamera → ambil foto. | Muncul *"📷 Foto … akan dikirim"*. Butuh R2 aktif di server (bagian F). |
+| 9 | **Timeline**. | Semua catatan hari itu urut waktu, foto tampil di atas. Geser satu aktivitas ke kiri → konfirmasi → terhapus. Panah ‹ › berpindah hari. |
+| 10 | **Check-out** → pilih penjemput (mis. *Ibu*) atau tulis nama lain. | Status kartu jadi *Pulang …*. |
+
+Ikon di kanan atas menunjukkan status sinkron: angka merah = jumlah data yang belum terkirim. Tarik layar ke bawah untuk sinkron manual.
+
+### 3. Skenario mode offline (paling penting)
+
+| # | Langkah | Yang seharusnya terjadi |
+|---|---|---|
+| 1 | Nyalakan **mode pesawat**. | Muncul pita *"Offline · data terakhir ditampilkan"*. Daftar anak tetap tampil. |
+| 2 | Catat beberapa aktivitas (makan, toilet) dan check-in anak lain. | Semua langsung tampil di aplikasi. Pita berubah jadi *"Offline · N data tersimpan di HP, dikirim saat online"*; ikon sinkron berangka. |
+| 3 | Tutup aplikasi sepenuhnya, lalu buka lagi (masih offline). | Data tadi masih ada, tidak hilang. |
+| 4 | Matikan mode pesawat. | Dalam beberapa detik angka hilang dan pita lenyap. |
+| 5 | Cek di HP orang tua atau lewat timeline API (bagian E langkah 4). | Semua aktivitas tadi ada, dengan jam saat dicatat (bukan jam saat terkirim). |
+| 6 | Coba **Keluar** saat masih ada data belum terkirim. | Muncul peringatan merah bahwa data akan **HILANG**. Pilih *Batal*. |
+
+### 4. Skenario orang tua
+
+Keluar, lalu login dengan akun orang tua (boleh di HP lain agar bisa melihat bersamaan).
+
+| # | Langkah | Yang seharusnya terjadi |
+|---|---|---|
+| 1 | Login. | Muncul **Anak Saya** dengan status hari ini (*Di daycare sejak …* / *Sudah dijemput …*). Tidak ada tombol pencatatan. |
+| 2 | Ketuk nama anak. | Timeline sama dengan yang dicatat pengasuh, termasuk nama pengasuh. Tidak bisa geser untuk menghapus. |
+| 3 | Pengasuh mencatat aktivitas baru di HP-nya, lalu orang tua tarik layar ke bawah. | Aktivitas baru muncul (otomatis juga dalam ±1 menit). |
+
+Uji keamanannya:
+- Login dengan **akun admin** → ditolak.
+- Admin **menonaktifkan** pengasuh di admin web → dalam ±1 menit aplikasi pengasuh kembali ke layar login.
+- Orang tua hanya melihat anaknya sendiri, bukan anak lain di kelas yang sama.
 
 ---
 
@@ -213,3 +286,7 @@ Push notification belum bisa diterima sampai aplikasi Flutter dibuat, karena but
 | Login admin selalu gagal | Pastikan akun dibuat dengan `-role admin`. Setelah 10× gagal, tunggu 15 menit. |
 | Tombol tidak bereaksi / muncul alert "Terjadi kesalahan" | Sesi mungkin habis (12 jam). Muat ulang halaman lalu login lagi. |
 | `go: command not found` | Tutup lalu buka lagi PowerShell/VS Code. |
+| Aplikasi: *"Tidak ada koneksi ke server"* padahal internet aktif | Server lokal: pastikan HP satu Wi-Fi dengan komputer, alamat IP benar, dan Windows Firewall mengizinkan port 8080. Render: tunggu ±1 menit lalu tarik layar ke bawah. |
+| Aplikasi: daftar anak kosong | Pengasuh belum ditugaskan ke kelas, atau kelas belum berisi anak (bagian C). Tarik ke bawah setelah memperbaiki. |
+| Aplikasi: pita merah *"N data ditolak server"* | Data tidak lolos validasi server (mis. anak sudah dipindah kelas). Data lain tetap terkirim; laporkan ke pengembang bila berulang. |
+| Aplikasi: foto tidak pernah muncul | R2 belum dikonfigurasi di server (bagian F). Foto tetap antre di HP. |
