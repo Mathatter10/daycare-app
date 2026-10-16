@@ -11,6 +11,7 @@ class AppColors {
   static const play = Color(0xFFEC4899);
   static const medical = Color(0xFFEF4444);
   static const muted = Color(0xFF6B7280);
+  static const text = Color(0xFF1F2937);
 }
 
 /// Thumb-zone primary buttons: full width, at least 56 px high.
@@ -47,8 +48,10 @@ ThemeData buildTheme() {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     ),
+    // labelStyle needs an explicit color: without one the chip label is
+    // painted white, invisible on the white chip.
     chipTheme: const ChipThemeData(
-      labelStyle: TextStyle(fontSize: 16),
+      labelStyle: TextStyle(fontSize: 16, color: AppColors.text),
       padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     ),
     bottomSheetTheme: const BottomSheetThemeData(backgroundColor: Colors.white, showDragHandle: true),

@@ -14,9 +14,10 @@ String hm(DateTime t) => DateFormat.Hm().format(t.toLocal());
 /// "Kamis, 15 Okt"
 String dayLabel(DateTime t) => DateFormat('EEEE, d MMM', 'id_ID').format(t.toLocal());
 
-/// "1 j 15 m", "40 m"
+/// "1 j 15 m", "40 m", "< 1 m"
 String durationLabel(Duration d) {
   final mins = d.inMinutes;
+  if (mins < 1) return '< 1 m';
   if (mins < 60) return '$mins m';
   final h = mins ~/ 60, m = mins % 60;
   return m == 0 ? '$h j' : '$h j $m m';
