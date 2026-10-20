@@ -39,8 +39,10 @@ type Config struct {
 
 	// FCMCredentials is a Firebase service-account JSON key. When empty,
 	// push notifications are logged instead of sent.
-	FCMCredentials []byte
-	FCMEndpoint    string
+	// FCMCredentialsFile, when set, is read at startup instead.
+	FCMCredentials     []byte
+	FCMCredentialsFile string
+	FCMEndpoint        string
 }
 
 // Load reads a .env file if present (local development only) and then
@@ -86,14 +88,9 @@ func Load() (*Config, error) {
 	}
 
 	cfg.FCMEndpoint = getEnv("FCM_ENDPOINT", "https://fcm.googleapis.com")
-	if path := os.Getenv("FCM_CREDENTIALS_FILE"); path != "" {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("FCM_CREDENTIALS_FILE: %w", err)
-		}
-		cfg.FCMCredentials = b
-	} else if js := os.Getenv("FCM_CREDENTIALS_JSON"); js != "" {
-		cfg.FCMCredentials = []byte(js)
+	cfg.FCMCredentialsFile = os.Getenv("FCM_CREDENTIALS_FILE")
+	if cfg.FCMCredentialsFile == "" {
+		cfg.FCMCredentials = []byte(os.Getenv("FCM_CREDENTIALS_JSON"))
 	}
 
 	if err := cfg.validate(); err != nil {

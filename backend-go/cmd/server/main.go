@@ -176,15 +176,25 @@ func run() error {
 // background worker pools. Missing storage or FCM settings disable those
 // features instead of failing startup.
 func setupMediaAndPush(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) (*push.Dispatcher, *media.Service, func(context.Context) error, error) {
+	// A bad optional setting is logged, never fatal: a crashing deploy would
+	// leave the previous release running with no sign of why.
 	var sender push.Sender = push.LogSender{}
-	if len(cfg.FCMCredentials) > 0 {
-		fcm, err := push.NewFCM(ctx, cfg.FCMCredentials, cfg.FCMEndpoint)
-		if err != nil {
-			return nil, nil, nil, err
+	creds := cfg.FCMCredentials
+	var credsErr error
+	if cfg.FCMCredentialsFile != "" {
+		creds, credsErr = os.ReadFile(cfg.FCMCredentialsFile)
+	}
+	if credsErr == nil && len(creds) > 0 {
+		var fcm *push.FCM
+		if fcm, credsErr = push.NewFCM(ctx, creds, cfg.FCMEndpoint); credsErr == nil {
+			sender = fcm
+			slog.Info("push notifications enabled (FCM)")
 		}
-		sender = fcm
-		slog.Info("push notifications enabled (FCM)")
-	} else {
+	}
+	switch {
+	case credsErr != nil:
+		slog.Error("push notifications disabled: bad FCM credentials", "err", credsErr)
+	case len(creds) == 0:
 		slog.Warn("push notifications disabled: FCM credentials not set")
 	}
 
@@ -192,14 +202,15 @@ func setupMediaAndPush(ctx context.Context, cfg *config.Config, pool *pgxpool.Po
 	if cfg.Storage.Configured() {
 		s, err := storage.New(cfg.Storage)
 		if err != nil {
-			return nil, nil, nil, err
-		}
-		if err := s.Check(ctx); err != nil {
-			slog.Error("media storage check failed", "err", err)
+			slog.Error("media uploads disabled: bad S3 settings", "err", err)
 		} else {
-			slog.Info("media storage enabled", "bucket", cfg.Storage.Bucket)
+			if err := s.Check(ctx); err != nil {
+				slog.Error("media storage check failed", "err", err)
+			} else {
+				slog.Info("media storage enabled", "bucket", cfg.Storage.Bucket)
+			}
+			store = s
 		}
-		store = s
 	} else {
 		slog.Warn("media uploads disabled: S3 storage not configured")
 	}
