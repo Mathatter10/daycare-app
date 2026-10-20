@@ -17,7 +17,7 @@ final authStoreProvider = Provider<AuthStore>((ref) => AuthStore());
 final apiClientProvider = Provider<ApiClient>(
   (ref) => ApiClient(
     store: ref.watch(authStoreProvider),
-    onSessionExpired: () => ref.read(sessionProvider.notifier).signOut(message: 'Sesi berakhir. Silakan masuk lagi.'),
+    onSessionExpired: () => ref.read(sessionProvider.notifier).sessionExpired(),
   ),
 );
 
@@ -56,7 +56,12 @@ class SessionNotifier extends Notifier<SessionState> {
   /// Throws [ApiException] with a user-facing message on failure.
   Future<void> signIn(String email, String password) async {
     final result = await ref.read(apiClientProvider).login(email.trim(), password);
-    await ref.read(authStoreProvider).save(result.user, result.tokens);
+    final store = ref.read(authStoreProvider);
+    // Unsent data kept from an expired session is only sent by its owner.
+    final owner = await store.dataOwner();
+    if (owner != null && owner != result.user.id) await clearDatabase(ref.read(isarProvider));
+    await store.setDataOwner(null);
+    await store.save(result.user, result.tokens);
     state = SignedIn(result.user);
   }
 
@@ -67,6 +72,30 @@ class SessionNotifier extends Notifier<SessionState> {
     await ref.read(authStoreProvider).clear();
     await clearDatabase(ref.read(isarProvider));
     state = SignedOut(message);
+  }
+
+  bool _expiring = false;
+
+  /// The server refused to renew the session (account deactivated, token
+  /// revoked). Unsent writes stay on the phone until the same account
+  /// logs in again; otherwise this is a normal sign-out.
+  Future<void> sessionExpired() async {
+    final s = state;
+    if (s is! SignedIn || _expiring) return;
+    _expiring = true;
+    try {
+      final unsent = await ref.read(isarProvider).outboxEntrys.filter().failedEqualTo(false).count();
+      if (unsent == 0) return await signOut(message: 'Sesi berakhir. Silakan masuk lagi.');
+      final store = ref.read(authStoreProvider);
+      await store.clear();
+      await store.setDataOwner(s.user.id);
+      state = SignedOut(
+        'Sesi berakhir. $unsent data belum terkirim masih tersimpan di HP ini. '
+        'Masuk lagi sebagai ${s.user.email} untuk mengirimnya; masuk dengan akun lain akan menghapusnya.',
+      );
+    } finally {
+      _expiring = false;
+    }
   }
 }
 

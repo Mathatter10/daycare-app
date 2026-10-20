@@ -44,6 +44,7 @@ class AuthStore {
   static const _kAccess = 'access_token';
   static const _kRefresh = 'refresh_token';
   static const _kUser = 'user';
+  static const _kDataOwner = 'data_owner';
 
   String? _accessCache;
 
@@ -76,4 +77,11 @@ class AuthStore {
     _accessCache = null;
     await _s.deleteAll();
   }
+
+  /// The user whose unsent data stayed on the phone when their session
+  /// expired; null when the local database holds nobody's data.
+  Future<String?> dataOwner() => _s.read(key: _kDataOwner);
+
+  Future<void> setDataOwner(String? userId) =>
+      userId == null ? _s.delete(key: _kDataOwner) : _s.write(key: _kDataOwner, value: userId);
 }

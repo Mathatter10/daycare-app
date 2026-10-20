@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../config.dart';
 import 'session.dart';
@@ -44,11 +45,19 @@ class LoginResult {
 /// JSON client for /api/v1. Adds the access token to every request and,
 /// on 401, refreshes it once (rotating refresh token) and retries.
 class ApiClient {
-  ApiClient({required AuthStore store, required void Function() onSessionExpired})
+  ApiClient({
+    required AuthStore store,
+    required void Function() onSessionExpired,
+    @visibleForTesting HttpClientAdapter? adapter,
+  })
     // ignore: prefer_initializing_formals
     : _store = store,
       // ignore: prefer_initializing_formals
       _onSessionExpired = onSessionExpired {
+    if (adapter != null) {
+      _dio.httpClientAdapter = adapter;
+      _raw.httpClientAdapter = adapter;
+    }
     _dio.interceptors.add(
       QueuedInterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -68,13 +77,21 @@ class ApiClient {
             if (current == null || current == sent) {
               await _refresh();
             }
-            final token = await _store.accessToken();
-            req.headers['Authorization'] = 'Bearer $token';
-            req.extra['retried'] = true;
-            handler.resolve(await _dio.fetch(req));
-          } catch (_) {
-            _onSessionExpired();
-            handler.next(err);
+          } catch (e) {
+            // Only the server refusing the refresh token ends the session.
+            // Offline or a sleeping server means "try again later".
+            if (_isRefusal(e)) _onSessionExpired();
+            return handler.next(err);
+          }
+          final token = await _store.accessToken();
+          req.headers['Authorization'] = 'Bearer $token';
+          req.extra['retried'] = true;
+          try {
+            // Through _raw: an error from _dio would queue behind this
+            // handler and never complete.
+            handler.resolve(await _raw.fetch(req));
+          } on DioException catch (e) {
+            handler.next(e);
           }
         },
       ),
@@ -102,6 +119,9 @@ class ApiClient {
     final res = await _raw.post<Map<String, dynamic>>('/auth/refresh', data: {'refresh_token': refresh});
     await _store.saveTokens(_tokensFrom(res.data!));
   }
+
+  static bool _isRefusal(Object e) =>
+      e is ApiException ? e.status == 401 : e is DioException && e.response?.statusCode == 401;
 
   Tokens _tokensFrom(Map<String, dynamic> j) => Tokens(j['access_token'] as String, j['refresh_token'] as String);
 

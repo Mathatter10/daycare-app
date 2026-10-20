@@ -289,4 +289,5 @@ Uji keamanannya:
 | Aplikasi: *"Tidak ada koneksi ke server"* padahal internet aktif | Server lokal: pastikan HP satu Wi-Fi dengan komputer, alamat IP benar, dan Windows Firewall mengizinkan port 8080. Render: tunggu ±1 menit lalu tarik layar ke bawah. |
 | Aplikasi: daftar anak kosong | Pengasuh belum ditugaskan ke kelas, atau kelas belum berisi anak (bagian C). Tarik ke bawah setelah memperbaiki. |
 | Aplikasi: pita merah *"N data ditolak server"* | Data tidak lolos validasi server (mis. anak sudah dipindah kelas). Data lain tetap terkirim; laporkan ke pengembang bila berulang. |
+| Aplikasi: *"Sesi berakhir. N data belum terkirim masih tersimpan di HP ini"* | Akun dinonaktifkan atau sesinya dicabut. Data tidak hilang: aktifkan lagi akunnya, lalu masuk dengan akun **yang sama** agar data terkirim. Masuk dengan akun lain akan menghapusnya. |
 | Aplikasi: foto tidak pernah muncul | R2 belum dikonfigurasi di server (bagian F). Foto tetap antre di HP. |
