@@ -74,12 +74,8 @@ func Load() (*Config, error) {
 	}
 	cfg.Location = loc
 
-	// Accept the endpoint as shown in provider dashboards (with scheme or
-	// trailing slash); the client wants a bare host[:port].
-	endpoint := strings.TrimSuffix(os.Getenv("S3_ENDPOINT"), "/")
-	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
 	cfg.Storage = storage.Config{
-		Endpoint:        endpoint,
+		Endpoint:        storageEndpoint(os.Getenv("S3_ENDPOINT")),
 		Region:          getEnv("S3_REGION", "auto"),
 		Bucket:          os.Getenv("S3_BUCKET"),
 		AccessKeyID:     os.Getenv("S3_ACCESS_KEY_ID"),
@@ -110,6 +106,17 @@ func (c *Config) validate() error {
 		errs = append(errs, errors.New("JWT_SECRET must be at least 32 characters"))
 	}
 	return errors.Join(errs...)
+}
+
+// storageEndpoint accepts the endpoint as shown in provider dashboards: with
+// scheme, trailing slash, or a bucket path (Cloudflare shows
+// https://<id>.r2.cloudflarestorage.com/<bucket>). The client wants a bare
+// host[:port].
+func storageEndpoint(raw string) string {
+	ep := strings.TrimSpace(raw)
+	ep = strings.TrimPrefix(strings.TrimPrefix(ep, "https://"), "http://")
+	host, _, _ := strings.Cut(ep, "/")
+	return host
 }
 
 func getEnv(key, fallback string) string {

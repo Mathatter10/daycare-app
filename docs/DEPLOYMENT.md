@@ -193,7 +193,7 @@ R2 gratis sampai 10 GB dan tanpa biaya unduh. Mengaktifkan R2 tetap meminta data
 
    | Key | Value |
    |---|---|
-   | `S3_ENDPOINT` | `<ACCOUNT_ID>.r2.cloudflarestorage.com` (boleh dengan `https://`) |
+   | `S3_ENDPOINT` | `<ACCOUNT_ID>.r2.cloudflarestorage.com` (boleh dengan `https://` atau `/daycare-media` di belakang, seperti yang tampil di Cloudflare) |
    | `S3_BUCKET` | `daycare-media` |
    | `S3_ACCESS_KEY_ID` | dari langkah 3 |
    | `S3_SECRET_ACCESS_KEY` | dari langkah 3 |
