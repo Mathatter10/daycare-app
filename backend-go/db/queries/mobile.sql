@@ -81,9 +81,9 @@ WHERE activities.child_id = EXCLUDED.child_id
   AND activities.deleted_at IS NULL
 RETURNING id, (xmax = 0)::bool AS inserted;
 
--- name: SoftDeleteActivity :exec
-UPDATE activities SET deleted_at = now()
-WHERE id = $1 AND deleted_at IS NULL;
+-- name: SoftDeleteActivity :execrows
+UPDATE activities SET deleted_at = now(), deleted_by = sqlc.arg(deleted_by)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 
 -- name: GetActivityView :one
 SELECT a.*, u.full_name AS caregiver_name

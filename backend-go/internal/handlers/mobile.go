@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -374,8 +375,18 @@ func (h *MobileHandler) DeleteActivity(c fiber.Ctx) error {
 	if err := h.authorizeChild(c, existing.ChildID); err != nil {
 		return err
 	}
-	if err := h.Q.SoftDeleteActivity(c.Context(), id); err != nil {
+	user := middleware.CurrentUser(c)
+	n, err := h.Q.SoftDeleteActivity(c.Context(), repository.SoftDeleteActivityParams{
+		ID:        id,
+		DeletedBy: uuid.NullUUID{UUID: user.ID, Valid: true},
+	})
+	if err != nil {
 		return err
+	}
+	if n > 0 {
+		// Deletes are rare and hard to explain afterwards; keep a trace.
+		slog.Info("activity deleted", "activity_id", id, "child_id", existing.ChildID,
+			"by", user.ID, "user_agent", c.Get(fiber.HeaderUserAgent))
 	}
 	return c.SendStatus(fiber.StatusNoContent)
 }

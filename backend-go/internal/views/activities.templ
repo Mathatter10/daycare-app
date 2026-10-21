@@ -1,0 +1,71 @@
+package views
+
+import "time"
+
+// DeletedActivity is one row of the deleted-activities audit page; times
+// are already in the daycare time zone.
+type DeletedActivity struct {
+	ID            string
+	ChildName     string
+	Title         string
+	Description   string
+	StartedAt     time.Time
+	CaregiverName string
+	DeletedAt     time.Time
+	DeletedBy     string // empty for deletions made before this was recorded
+}
+
+const deletedCols = 5
+
+templ DeletedActivitiesPage(p Page, rows []DeletedActivity) {
+	@AdminLayout(p) {
+		@PageHeader("Aktivitas terhapus", "Aktivitas yang dihapus dari aplikasi dalam 30 hari terakhir. Pulihkan bila terhapus tanpa sengaja; HP pengasuh dan orang tua ikut terbarui saat sinkron.")
+		@Table([]string{"Aktivitas", "Anak", "Dicatat", "Dihapus", ""}, "deleted-rows") {
+			for _, r := range rows {
+				@DeletedActivityRow(r)
+			}
+			@EmptyRow(deletedCols, "Tidak ada aktivitas yang dihapus.")
+		}
+	}
+}
+
+templ DeletedActivityRow(r DeletedActivity) {
+	<tr>
+		<td class="px-4 py-3">
+			<p class="font-semibold">{ r.Title }</p>
+			<p class="text-xs text-gray-500">{ r.Description }</p>
+		</td>
+		<td class="px-4 py-3">{ r.ChildName }</td>
+		<td class="whitespace-nowrap px-4 py-3">
+			<p>{ dateTimeLabel(r.StartedAt) }</p>
+			<p class="text-xs text-gray-500">oleh { r.CaregiverName }</p>
+		</td>
+		<td class="whitespace-nowrap px-4 py-3">
+			<p>{ dateTimeLabel(r.DeletedAt) }</p>
+			<p class="text-xs text-gray-500">
+				if r.DeletedBy == "" {
+					oleh (tidak tercatat)
+				} else {
+					oleh { r.DeletedBy }
+				}
+			</p>
+		</td>
+		<td class="whitespace-nowrap px-4 py-3 text-right">
+			@RowButton("Pulihkan", false, templ.Attributes{
+				"hx-post":    "/admin/activities/" + r.ID + "/restore",
+				"hx-confirm": "Pulihkan " + r.Title + "?",
+				"hx-target":  "closest tr",
+				"hx-swap":    "outerHTML",
+			})
+		</td>
+	</tr>
+}
+
+// RestoredRow replaces a row after a successful restore.
+templ RestoredRow() {
+	<tr>
+		<td colspan={ deletedCols } class="bg-accent/10 px-4 py-3 text-sm font-semibold text-accent">
+			✓ Dipulihkan. Aktivitas tampil lagi di aplikasi setelah sinkron.
+		</td>
+	</tr>
+}

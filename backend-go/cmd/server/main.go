@@ -120,8 +120,11 @@ func run() error {
 	admin.Post("/login", middleware.LoginRateLimit(), adminAuth.Login)
 	admin.Post("/logout", adminAuth.Logout)
 
-	adm := handlers.NewAdminHandler(pool)
+	adm := handlers.NewAdminHandler(pool, cfg.Location)
 	admin.Get("/", requireAdmin, adm.Dashboard)
+
+	admin.Get("/activities/deleted", requireAdmin, adm.DeletedActivities)
+	admin.Post("/activities/:id/restore", requireAdmin, adm.RestoreActivity)
 
 	admin.Get("/classes", requireAdmin, adm.Classes)
 	admin.Get("/classes/new", requireAdmin, adm.NewClass)

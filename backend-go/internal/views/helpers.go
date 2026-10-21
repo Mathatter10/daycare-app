@@ -12,7 +12,7 @@ import (
 // Page carries what every admin page needs for the shell.
 type Page struct {
 	Title     string
-	Nav       string // dashboard | children | classes | caregivers | parents
+	Nav       string // dashboard | children | classes | caregivers | parents | deleted
 	AdminName string
 }
 
@@ -65,6 +65,13 @@ func ageLabel(dob time.Time) string {
 		return fmt.Sprintf("%d th", months/12)
 	}
 	return fmt.Sprintf("%d th %d bln", months/12, months%12)
+}
+
+var monthShort = [...]string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
+
+// dateTimeLabel formats like "20 Okt 2026 14:31".
+func dateTimeLabel(t time.Time) string {
+	return fmt.Sprintf("%d %s %d %s", t.Day(), monthShort[t.Month()-1], t.Year(), t.Format("15:04"))
 }
 
 func genderLabel(g pgtype.Text) string {

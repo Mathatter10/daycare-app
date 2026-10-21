@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/a-h/templ"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,12 +22,13 @@ import (
 //   - form POST invalid     -> modal partial with errors, status 422
 //   - form POST success     -> empty #modal (closes it) + out-of-band row swap
 type AdminHandler struct {
-	DB *pgxpool.Pool
-	Q  *repository.Queries
+	DB       *pgxpool.Pool
+	Q        *repository.Queries
+	Location *time.Location // daycare time zone for displayed times
 }
 
-func NewAdminHandler(pool *pgxpool.Pool) *AdminHandler {
-	return &AdminHandler{DB: pool, Q: repository.New(pool)}
+func NewAdminHandler(pool *pgxpool.Pool, loc *time.Location) *AdminHandler {
+	return &AdminHandler{DB: pool, Q: repository.New(pool), Location: loc}
 }
 
 func (h *AdminHandler) page(c fiber.Ctx, title, nav string) views.Page {

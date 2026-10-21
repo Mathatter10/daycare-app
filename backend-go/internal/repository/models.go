@@ -230,17 +230,18 @@ func (ns NullUserRole) Value() (driver.Value, error) {
 }
 
 type Activity struct {
-	ID          uuid.UUID    `json:"id"`
-	ChildID     uuid.UUID    `json:"child_id"`
-	CaregiverID uuid.UUID    `json:"caregiver_id"`
-	Type        ActivityType `json:"type"`
-	StartedAt   time.Time    `json:"started_at"`
-	EndedAt     *time.Time   `json:"ended_at"`
-	Details     []byte       `json:"details"`
-	Notes       pgtype.Text  `json:"notes"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
-	DeletedAt   *time.Time   `json:"deleted_at"`
+	ID          uuid.UUID     `json:"id"`
+	ChildID     uuid.UUID     `json:"child_id"`
+	CaregiverID uuid.UUID     `json:"caregiver_id"`
+	Type        ActivityType  `json:"type"`
+	StartedAt   time.Time     `json:"started_at"`
+	EndedAt     *time.Time    `json:"ended_at"`
+	Details     []byte        `json:"details"`
+	Notes       pgtype.Text   `json:"notes"`
+	CreatedAt   time.Time     `json:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
+	DeletedAt   *time.Time    `json:"deleted_at"`
+	DeletedBy   uuid.NullUUID `json:"deleted_by"`
 }
 
 type Attendance struct {

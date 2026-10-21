@@ -180,7 +180,9 @@ Response `200`: objek aktivitas:
 | `422` | Validasi gagal; pesan menjelaskan field yang salah |
 
 ### `DELETE /activities/{id}`
-`204`. Aman diulang, termasuk untuk ID yang belum pernah tersimpan di server.
+`204`. Aman diulang, termasuk untuk ID yang belum pernah tersimpan di server. Server mencatat siapa yang menghapus (`deleted_by`, hanya terlihat di admin web). Admin dapat memulihkan aktivitas dalam 30 hari; aktivitas yang dipulihkan datang lagi lewat `/sync` dengan `deleted_at: null`.
+
+Aplikasi menyimpan salinan aktivitas di entri outbox hapus. Selama hapusan masih di outbox (menunggu atau ditolak), aktivitas itu **tidak** ditampilkan lagi dari hasil `/sync`, dan pengasuh bisa membatalkan hapusan dari layar *Data belum terkirim*.
 
 ## Foto & video
 

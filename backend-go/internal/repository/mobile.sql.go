@@ -145,7 +145,7 @@ func (q *Queries) CheckOut(ctx context.Context, arg CheckOutParams) (Attendance,
 
 const getActivity = `-- name: GetActivity :one
 
-SELECT id, child_id, caregiver_id, type, started_at, ended_at, details, notes, created_at, updated_at, deleted_at FROM activities WHERE id = $1
+SELECT id, child_id, caregiver_id, type, started_at, ended_at, details, notes, created_at, updated_at, deleted_at, deleted_by FROM activities WHERE id = $1
 `
 
 // Activities -------------------------------------------------------------------
@@ -164,30 +164,32 @@ func (q *Queries) GetActivity(ctx context.Context, id uuid.UUID) (Activity, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DeletedBy,
 	)
 	return i, err
 }
 
 const getActivityView = `-- name: GetActivityView :one
-SELECT a.id, a.child_id, a.caregiver_id, a.type, a.started_at, a.ended_at, a.details, a.notes, a.created_at, a.updated_at, a.deleted_at, u.full_name AS caregiver_name
+SELECT a.id, a.child_id, a.caregiver_id, a.type, a.started_at, a.ended_at, a.details, a.notes, a.created_at, a.updated_at, a.deleted_at, a.deleted_by, u.full_name AS caregiver_name
 FROM activities a
 JOIN users u ON u.id = a.caregiver_id
 WHERE a.id = $1
 `
 
 type GetActivityViewRow struct {
-	ID            uuid.UUID    `json:"id"`
-	ChildID       uuid.UUID    `json:"child_id"`
-	CaregiverID   uuid.UUID    `json:"caregiver_id"`
-	Type          ActivityType `json:"type"`
-	StartedAt     time.Time    `json:"started_at"`
-	EndedAt       *time.Time   `json:"ended_at"`
-	Details       []byte       `json:"details"`
-	Notes         pgtype.Text  `json:"notes"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
-	DeletedAt     *time.Time   `json:"deleted_at"`
-	CaregiverName string       `json:"caregiver_name"`
+	ID            uuid.UUID     `json:"id"`
+	ChildID       uuid.UUID     `json:"child_id"`
+	CaregiverID   uuid.UUID     `json:"caregiver_id"`
+	Type          ActivityType  `json:"type"`
+	StartedAt     time.Time     `json:"started_at"`
+	EndedAt       *time.Time    `json:"ended_at"`
+	Details       []byte        `json:"details"`
+	Notes         pgtype.Text   `json:"notes"`
+	CreatedAt     time.Time     `json:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at"`
+	DeletedAt     *time.Time    `json:"deleted_at"`
+	DeletedBy     uuid.NullUUID `json:"deleted_by"`
+	CaregiverName string        `json:"caregiver_name"`
 }
 
 func (q *Queries) GetActivityView(ctx context.Context, id uuid.UUID) (GetActivityViewRow, error) {
@@ -205,6 +207,7 @@ func (q *Queries) GetActivityView(ctx context.Context, id uuid.UUID) (GetActivit
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DeletedBy,
 		&i.CaregiverName,
 	)
 	return i, err
@@ -320,7 +323,7 @@ func (q *Queries) ListAccessibleChildren(ctx context.Context, arg ListAccessible
 }
 
 const listChildActivities = `-- name: ListChildActivities :many
-SELECT a.id, a.child_id, a.caregiver_id, a.type, a.started_at, a.ended_at, a.details, a.notes, a.created_at, a.updated_at, a.deleted_at, u.full_name AS caregiver_name
+SELECT a.id, a.child_id, a.caregiver_id, a.type, a.started_at, a.ended_at, a.details, a.notes, a.created_at, a.updated_at, a.deleted_at, a.deleted_by, u.full_name AS caregiver_name
 FROM activities a
 JOIN users u ON u.id = a.caregiver_id
 WHERE a.child_id = $1
@@ -337,18 +340,19 @@ type ListChildActivitiesParams struct {
 }
 
 type ListChildActivitiesRow struct {
-	ID            uuid.UUID    `json:"id"`
-	ChildID       uuid.UUID    `json:"child_id"`
-	CaregiverID   uuid.UUID    `json:"caregiver_id"`
-	Type          ActivityType `json:"type"`
-	StartedAt     time.Time    `json:"started_at"`
-	EndedAt       *time.Time   `json:"ended_at"`
-	Details       []byte       `json:"details"`
-	Notes         pgtype.Text  `json:"notes"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
-	DeletedAt     *time.Time   `json:"deleted_at"`
-	CaregiverName string       `json:"caregiver_name"`
+	ID            uuid.UUID     `json:"id"`
+	ChildID       uuid.UUID     `json:"child_id"`
+	CaregiverID   uuid.UUID     `json:"caregiver_id"`
+	Type          ActivityType  `json:"type"`
+	StartedAt     time.Time     `json:"started_at"`
+	EndedAt       *time.Time    `json:"ended_at"`
+	Details       []byte        `json:"details"`
+	Notes         pgtype.Text   `json:"notes"`
+	CreatedAt     time.Time     `json:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at"`
+	DeletedAt     *time.Time    `json:"deleted_at"`
+	DeletedBy     uuid.NullUUID `json:"deleted_by"`
+	CaregiverName string        `json:"caregiver_name"`
 }
 
 func (q *Queries) ListChildActivities(ctx context.Context, arg ListChildActivitiesParams) ([]ListChildActivitiesRow, error) {
@@ -372,6 +376,7 @@ func (q *Queries) ListChildActivities(ctx context.Context, arg ListChildActiviti
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.DeletedBy,
 			&i.CaregiverName,
 		); err != nil {
 			return nil, err
@@ -384,19 +389,27 @@ func (q *Queries) ListChildActivities(ctx context.Context, arg ListChildActiviti
 	return items, nil
 }
 
-const softDeleteActivity = `-- name: SoftDeleteActivity :exec
-UPDATE activities SET deleted_at = now()
-WHERE id = $1 AND deleted_at IS NULL
+const softDeleteActivity = `-- name: SoftDeleteActivity :execrows
+UPDATE activities SET deleted_at = now(), deleted_by = $1
+WHERE id = $2 AND deleted_at IS NULL
 `
 
-func (q *Queries) SoftDeleteActivity(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, softDeleteActivity, id)
-	return err
+type SoftDeleteActivityParams struct {
+	DeletedBy uuid.NullUUID `json:"deleted_by"`
+	ID        uuid.UUID     `json:"id"`
+}
+
+func (q *Queries) SoftDeleteActivity(ctx context.Context, arg SoftDeleteActivityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteActivity, arg.DeletedBy, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const syncActivities = `-- name: SyncActivities :many
 
-SELECT a.id, a.child_id, a.caregiver_id, a.type, a.started_at, a.ended_at, a.details, a.notes, a.created_at, a.updated_at, a.deleted_at, u.full_name AS caregiver_name
+SELECT a.id, a.child_id, a.caregiver_id, a.type, a.started_at, a.ended_at, a.details, a.notes, a.created_at, a.updated_at, a.deleted_at, a.deleted_by, u.full_name AS caregiver_name
 FROM activities a
 JOIN users u ON u.id = a.caregiver_id
 WHERE a.child_id = ANY($1::uuid[])
@@ -415,18 +428,19 @@ type SyncActivitiesParams struct {
 }
 
 type SyncActivitiesRow struct {
-	ID            uuid.UUID    `json:"id"`
-	ChildID       uuid.UUID    `json:"child_id"`
-	CaregiverID   uuid.UUID    `json:"caregiver_id"`
-	Type          ActivityType `json:"type"`
-	StartedAt     time.Time    `json:"started_at"`
-	EndedAt       *time.Time   `json:"ended_at"`
-	Details       []byte       `json:"details"`
-	Notes         pgtype.Text  `json:"notes"`
-	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
-	DeletedAt     *time.Time   `json:"deleted_at"`
-	CaregiverName string       `json:"caregiver_name"`
+	ID            uuid.UUID     `json:"id"`
+	ChildID       uuid.UUID     `json:"child_id"`
+	CaregiverID   uuid.UUID     `json:"caregiver_id"`
+	Type          ActivityType  `json:"type"`
+	StartedAt     time.Time     `json:"started_at"`
+	EndedAt       *time.Time    `json:"ended_at"`
+	Details       []byte        `json:"details"`
+	Notes         pgtype.Text   `json:"notes"`
+	CreatedAt     time.Time     `json:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at"`
+	DeletedAt     *time.Time    `json:"deleted_at"`
+	DeletedBy     uuid.NullUUID `json:"deleted_by"`
+	CaregiverName string        `json:"caregiver_name"`
 }
 
 // Sync (keyset pagination on updated_at, id; includes soft-deleted rows) -------
@@ -457,6 +471,7 @@ func (q *Queries) SyncActivities(ctx context.Context, arg SyncActivitiesParams) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.DeletedBy,
 			&i.CaregiverName,
 		); err != nil {
 			return nil, err
