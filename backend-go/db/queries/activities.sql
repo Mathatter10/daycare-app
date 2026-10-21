@@ -19,8 +19,13 @@ LIMIT 300;
 -- Clearing deleted_at bumps updated_at (trigger), so /sync brings the
 -- activity back on every device.
 -- name: RestoreActivity :execrows
-UPDATE activities SET deleted_at = NULL, deleted_by = NULL
-WHERE id = $1 AND deleted_at IS NOT NULL;
+WITH r AS (
+    UPDATE activities SET deleted_at = NULL, deleted_by = NULL
+    WHERE activities.id = sqlc.arg(id) AND activities.deleted_at IS NOT NULL
+    RETURNING activities.id
+)
+INSERT INTO activity_events (activity_id, action, actor_id)
+SELECT id, 'restored', sqlc.arg(actor_id)::uuid FROM r;
 
 -- Admin: one child's day, for incident reports ----------------------------------
 
@@ -50,12 +55,10 @@ WHERE a.child_id = $1 AND a.attendance_date = $2;
 -- name: ListChildDayActivitiesReport :many
 SELECT
     a.id, a.type, a.started_at, a.ended_at, a.details, a.notes,
-    a.created_at, a.updated_at, a.deleted_at,
-    cg.full_name AS caregiver_name,
-    d.full_name  AS deleted_by_name
+    a.created_at, a.deleted_at,
+    cg.full_name AS caregiver_name
 FROM activities a
-JOIN users cg     ON cg.id = a.caregiver_id
-LEFT JOIN users d ON d.id = a.deleted_by
+JOIN users cg ON cg.id = a.caregiver_id
 WHERE a.child_id = $1
   AND a.started_at >= sqlc.arg(from_time)
   AND a.started_at <  sqlc.arg(to_time)
@@ -71,3 +74,13 @@ WHERE m.child_id = $1
   AND m.taken_at >= sqlc.arg(from_time)
   AND m.taken_at <  sqlc.arg(to_time)
 ORDER BY m.taken_at;
+
+-- name: ListChildDayActivityEvents :many
+SELECT e.activity_id, e.action, e.at, u.full_name AS actor_name
+FROM activity_events e
+JOIN activities a  ON a.id = e.activity_id
+LEFT JOIN users u  ON u.id = e.actor_id
+WHERE a.child_id = $1
+  AND a.started_at >= sqlc.arg(from_time)
+  AND a.started_at <  sqlc.arg(to_time)
+ORDER BY e.at;

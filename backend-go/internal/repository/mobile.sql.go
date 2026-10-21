@@ -389,9 +389,29 @@ func (q *Queries) ListChildActivities(ctx context.Context, arg ListChildActiviti
 	return items, nil
 }
 
+const logActivityEdit = `-- name: LogActivityEdit :exec
+INSERT INTO activity_events (activity_id, action, actor_id)
+VALUES ($1, 'edited', $2)
+`
+
+type LogActivityEditParams struct {
+	ActivityID uuid.UUID     `json:"activity_id"`
+	ActorID    uuid.NullUUID `json:"actor_id"`
+}
+
+func (q *Queries) LogActivityEdit(ctx context.Context, arg LogActivityEditParams) error {
+	_, err := q.db.Exec(ctx, logActivityEdit, arg.ActivityID, arg.ActorID)
+	return err
+}
+
 const softDeleteActivity = `-- name: SoftDeleteActivity :execrows
-UPDATE activities SET deleted_at = now(), deleted_by = $1
-WHERE id = $2 AND deleted_at IS NULL
+WITH d AS (
+    UPDATE activities SET deleted_at = now(), deleted_by = $1
+    WHERE activities.id = $2 AND activities.deleted_at IS NULL
+    RETURNING activities.id, activities.deleted_by, activities.deleted_at
+)
+INSERT INTO activity_events (activity_id, action, actor_id, at)
+SELECT id, 'deleted', deleted_by, deleted_at FROM d
 `
 
 type SoftDeleteActivityParams struct {
@@ -399,6 +419,7 @@ type SoftDeleteActivityParams struct {
 	ID        uuid.UUID     `json:"id"`
 }
 
+// Logs the deletion in the same statement; no row affected = already gone.
 func (q *Queries) SoftDeleteActivity(ctx context.Context, arg SoftDeleteActivityParams) (int64, error) {
 	result, err := q.db.Exec(ctx, softDeleteActivity, arg.DeletedBy, arg.ID)
 	if err != nil {

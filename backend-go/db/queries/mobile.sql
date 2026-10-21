@@ -81,9 +81,19 @@ WHERE activities.child_id = EXCLUDED.child_id
   AND activities.deleted_at IS NULL
 RETURNING id, (xmax = 0)::bool AS inserted;
 
+-- Logs the deletion in the same statement; no row affected = already gone.
 -- name: SoftDeleteActivity :execrows
-UPDATE activities SET deleted_at = now(), deleted_by = sqlc.arg(deleted_by)
-WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
+WITH d AS (
+    UPDATE activities SET deleted_at = now(), deleted_by = sqlc.arg(deleted_by)
+    WHERE activities.id = sqlc.arg(id) AND activities.deleted_at IS NULL
+    RETURNING activities.id, activities.deleted_by, activities.deleted_at
+)
+INSERT INTO activity_events (activity_id, action, actor_id, at)
+SELECT id, 'deleted', deleted_by, deleted_at FROM d;
+
+-- name: LogActivityEdit :exec
+INSERT INTO activity_events (activity_id, action, actor_id)
+VALUES ($1, 'edited', $2);
 
 -- name: GetActivityView :one
 SELECT a.*, u.full_name AS caregiver_name

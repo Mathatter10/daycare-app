@@ -155,9 +155,12 @@ func join(parts ...string) string {
 	return strings.Join(out, " · ")
 }
 
-// duration formats like "1 j 15 m" or "40 m".
+// duration formats like "1 j 15 m", "40 m" or "< 1 m" (as the app does).
 func duration(d time.Duration) string {
 	mins := int(d.Round(time.Minute).Minutes())
+	if d < time.Minute {
+		return "< 1 m"
+	}
 	if mins < 60 {
 		return fmt.Sprintf("%d m", mins)
 	}

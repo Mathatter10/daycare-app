@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
@@ -15,13 +16,15 @@ import (
 	"github.com/Mathatter10/daycare-app/backend-go/internal/views"
 )
 
-const (
-	// lateEntry is when an activity reaching the server after the time it
-	// happened is worth pointing out (logged afterwards or sent offline).
-	lateEntry = 10 * time.Minute
-	// editedAfter ignores the few seconds between saving and a quick fix.
-	editedAfter = time.Minute
-)
+// lateEntry is when an activity reaching the server after the time it
+// happened is worth pointing out (logged afterwards or sent offline).
+const lateEntry = 10 * time.Minute
+
+var eventLabel = map[repository.ActivityEventAction]string{
+	repository.ActivityEventActionEdited:   "Diubah",
+	repository.ActivityEventActionDeleted:  "DIHAPUS",
+	repository.ActivityEventActionRestored: "Dipulihkan",
+}
 
 // ChildTimeline shows one day of a child in chronological order, including
 // deleted activities and who recorded what, so it can serve as the basis
@@ -102,6 +105,22 @@ func (h *AdminHandler) ChildTimeline(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	events, err := h.Q.ListChildDayActivityEvents(ctx, repository.ListChildDayActivityEventsParams{
+		ChildID: childID, FromTime: day, ToTime: day.AddDate(0, 0, 1),
+	})
+	if err != nil {
+		return err
+	}
+	history := map[uuid.UUID][]string{}
+	for _, ev := range events {
+		by := "(tidak tercatat)"
+		if ev.ActorName.Valid {
+			by = ev.ActorName.String
+		}
+		history[ev.ActivityID] = append(history[ev.ActivityID],
+			fmt.Sprintf("%s %s oleh %s", eventLabel[ev.Action], views.DateTimeLabel(ev.At.In(h.Location)), by))
+	}
+
 	msgs := push.Messages{Location: h.Location}
 	for _, a := range acts {
 		msg := msgs.ActivityLogged(push.ActivityEvent{
@@ -119,18 +138,11 @@ func (h *AdminHandler) ChildTimeline(c fiber.Ctx) error {
 		if late := a.CreatedAt.Sub(a.StartedAt); late > lateEntry {
 			e.Audit = append(e.Audit, fmt.Sprintf("Masuk ke server %s (%s setelah kejadian)", h.clock(a.CreatedAt), lateLabel(late)))
 		}
+		e.Audit = append(e.Audit, history[a.ID]...)
 		if a.DeletedAt != nil {
-			by := "(tidak tercatat)"
-			if a.DeletedByName.Valid {
-				by = a.DeletedByName.String
-			}
-			e.Audit = append(e.Audit, fmt.Sprintf("DIHAPUS %s oleh %s", views.DateTimeLabel(a.DeletedAt.In(h.Location)), by))
 			r.DeletedCount++
 		} else {
 			r.ActivityCount++
-			if a.UpdatedAt.Sub(a.CreatedAt) > editedAfter {
-				e.Audit = append(e.Audit, "Terakhir diubah "+views.DateTimeLabel(a.UpdatedAt.In(h.Location)))
-			}
 		}
 		r.Entries = append(r.Entries, e)
 	}

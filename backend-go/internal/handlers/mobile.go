@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"reflect"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -339,6 +341,15 @@ func (h *MobileHandler) PutActivity(c fiber.Ctx) error {
 		return err
 	}
 
+	if !upserted.Inserted && activityEdited(prev, typ, startedAt, req.EndedAt, details, req.Notes) {
+		if err := h.Q.LogActivityEdit(ctx, repository.LogActivityEditParams{
+			ActivityID: id,
+			ActorID:    uuid.NullUUID{UUID: middleware.CurrentUser(c).ID, Valid: true},
+		}); err != nil {
+			return err
+		}
+	}
+
 	event := push.ActivityEvent{
 		ID: id, ChildID: req.ChildID, Type: typ, StartedAt: startedAt,
 		EndedAt: req.EndedAt, Details: details, Notes: req.Notes,
@@ -392,6 +403,30 @@ func (h *MobileHandler) DeleteActivity(c fiber.Ctx) error {
 }
 
 // --- helpers ------------------------------------------------------------------
+
+// activityEdited reports whether a PUT changed a stored activity in a way
+// worth recording. Offline resends of the same data and ending a sleep or
+// play (ended_at set for the first time) are not edits.
+func activityEdited(prev repository.Activity, typ repository.ActivityType, startedAt time.Time, endedAt *time.Time, details []byte, notes string) bool {
+	switch {
+	case prev.Type != typ, !prev.StartedAt.Equal(startedAt), prev.Notes.String != notes, !jsonEqual(prev.Details, details):
+		return true
+	case prev.EndedAt == nil:
+		return false
+	default:
+		return endedAt == nil || !prev.EndedAt.Equal(*endedAt)
+	}
+}
+
+// jsonEqual compares JSON by value; Postgres jsonb does not keep key order
+// or spacing.
+func jsonEqual(a, b []byte) bool {
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return bytes.Equal(a, b)
+	}
+	return reflect.DeepEqual(x, y)
+}
 
 func (h *MobileHandler) accessibleChildren(ctx context.Context, user repository.User) ([]repository.ListAccessibleChildrenRow, error) {
 	return h.Q.ListAccessibleChildren(ctx, repository.ListAccessibleChildrenParams{

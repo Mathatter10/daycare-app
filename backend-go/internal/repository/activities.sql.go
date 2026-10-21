@@ -101,12 +101,10 @@ func (q *Queries) GetChildReportHeader(ctx context.Context, id uuid.UUID) (GetCh
 const listChildDayActivitiesReport = `-- name: ListChildDayActivitiesReport :many
 SELECT
     a.id, a.type, a.started_at, a.ended_at, a.details, a.notes,
-    a.created_at, a.updated_at, a.deleted_at,
-    cg.full_name AS caregiver_name,
-    d.full_name  AS deleted_by_name
+    a.created_at, a.deleted_at,
+    cg.full_name AS caregiver_name
 FROM activities a
-JOIN users cg     ON cg.id = a.caregiver_id
-LEFT JOIN users d ON d.id = a.deleted_by
+JOIN users cg ON cg.id = a.caregiver_id
 WHERE a.child_id = $1
   AND a.started_at >= $2
   AND a.started_at <  $3
@@ -127,10 +125,8 @@ type ListChildDayActivitiesReportRow struct {
 	Details       []byte       `json:"details"`
 	Notes         pgtype.Text  `json:"notes"`
 	CreatedAt     time.Time    `json:"created_at"`
-	UpdatedAt     time.Time    `json:"updated_at"`
 	DeletedAt     *time.Time   `json:"deleted_at"`
 	CaregiverName string       `json:"caregiver_name"`
-	DeletedByName pgtype.Text  `json:"deleted_by_name"`
 }
 
 // Includes deleted activities: a report must show what was removed.
@@ -151,10 +147,57 @@ func (q *Queries) ListChildDayActivitiesReport(ctx context.Context, arg ListChil
 			&i.Details,
 			&i.Notes,
 			&i.CreatedAt,
-			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.CaregiverName,
-			&i.DeletedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChildDayActivityEvents = `-- name: ListChildDayActivityEvents :many
+SELECT e.activity_id, e.action, e.at, u.full_name AS actor_name
+FROM activity_events e
+JOIN activities a  ON a.id = e.activity_id
+LEFT JOIN users u  ON u.id = e.actor_id
+WHERE a.child_id = $1
+  AND a.started_at >= $2
+  AND a.started_at <  $3
+ORDER BY e.at
+`
+
+type ListChildDayActivityEventsParams struct {
+	ChildID  uuid.UUID `json:"child_id"`
+	FromTime time.Time `json:"from_time"`
+	ToTime   time.Time `json:"to_time"`
+}
+
+type ListChildDayActivityEventsRow struct {
+	ActivityID uuid.UUID           `json:"activity_id"`
+	Action     ActivityEventAction `json:"action"`
+	At         time.Time           `json:"at"`
+	ActorName  pgtype.Text         `json:"actor_name"`
+}
+
+func (q *Queries) ListChildDayActivityEvents(ctx context.Context, arg ListChildDayActivityEventsParams) ([]ListChildDayActivityEventsRow, error) {
+	rows, err := q.db.Query(ctx, listChildDayActivityEvents, arg.ChildID, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChildDayActivityEventsRow{}
+	for rows.Next() {
+		var i ListChildDayActivityEventsRow
+		if err := rows.Scan(
+			&i.ActivityID,
+			&i.Action,
+			&i.At,
+			&i.ActorName,
 		); err != nil {
 			return nil, err
 		}
@@ -293,14 +336,24 @@ func (q *Queries) ListDeletedActivities(ctx context.Context, since time.Time) ([
 }
 
 const restoreActivity = `-- name: RestoreActivity :execrows
-UPDATE activities SET deleted_at = NULL, deleted_by = NULL
-WHERE id = $1 AND deleted_at IS NOT NULL
+WITH r AS (
+    UPDATE activities SET deleted_at = NULL, deleted_by = NULL
+    WHERE activities.id = $2 AND activities.deleted_at IS NOT NULL
+    RETURNING activities.id
+)
+INSERT INTO activity_events (activity_id, action, actor_id)
+SELECT id, 'restored', $1::uuid FROM r
 `
+
+type RestoreActivityParams struct {
+	ActorID uuid.UUID `json:"actor_id"`
+	ID      uuid.UUID `json:"id"`
+}
 
 // Clearing deleted_at bumps updated_at (trigger), so /sync brings the
 // activity back on every device.
-func (q *Queries) RestoreActivity(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, restoreActivity, id)
+func (q *Queries) RestoreActivity(ctx context.Context, arg RestoreActivityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreActivity, arg.ActorID, arg.ID)
 	if err != nil {
 		return 0, err
 	}

@@ -13,6 +13,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ActivityEventAction string
+
+const (
+	ActivityEventActionEdited   ActivityEventAction = "edited"
+	ActivityEventActionDeleted  ActivityEventAction = "deleted"
+	ActivityEventActionRestored ActivityEventAction = "restored"
+)
+
+func (e *ActivityEventAction) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ActivityEventAction(s)
+	case string:
+		*e = ActivityEventAction(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ActivityEventAction: %T", src)
+	}
+	return nil
+}
+
+type NullActivityEventAction struct {
+	ActivityEventAction ActivityEventAction `json:"activity_event_action"`
+	Valid               bool                `json:"valid"` // Valid is true if ActivityEventAction is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullActivityEventAction) Scan(value interface{}) error {
+	if value == nil {
+		ns.ActivityEventAction, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ActivityEventAction.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullActivityEventAction) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ActivityEventAction), nil
+}
+
 type ActivityType string
 
 const (
@@ -242,6 +285,14 @@ type Activity struct {
 	UpdatedAt   time.Time     `json:"updated_at"`
 	DeletedAt   *time.Time    `json:"deleted_at"`
 	DeletedBy   uuid.NullUUID `json:"deleted_by"`
+}
+
+type ActivityEvent struct {
+	ID         uuid.UUID           `json:"id"`
+	ActivityID uuid.UUID           `json:"activity_id"`
+	Action     ActivityEventAction `json:"action"`
+	ActorID    uuid.NullUUID       `json:"actor_id"`
+	At         time.Time           `json:"at"`
 }
 
 type Attendance struct {

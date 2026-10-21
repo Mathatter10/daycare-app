@@ -277,6 +277,7 @@ Ikon di kanan atas menunjukkan status sinkron: angka merah = jumlah data yang be
 | 2 | Pindah hari dengan **‹ Sebelumnya** / **Berikutnya ›** atau pilih tanggal. | Isi laporan berganti tanpa memuat ulang halaman. Tanggal masa depan tidak bisa dipilih. |
 | 3 | Buka tanggal yang ada aktivitas dihapus. | Aktivitas itu tetap tampil, **dicoret** dengan latar merah, plus *"DIHAPUS … oleh …"* di kolom *Keterangan sistem*. |
 | 4 | Catat aktivitas saat HP offline, kirim lebih dari 10 menit kemudian, lalu buka timeline. | Kolom *Keterangan sistem* menulis *"Masuk ke server … (N menit setelah kejadian)"*. |
+| 4b | Pulihkan aktivitas itu (bagian 3b), lalu buka lagi timeline-nya. | Riwayat lengkap tampil berurutan: *"DIHAPUS … oleh …"* lalu *"Dipulihkan … oleh (admin)"*. Mengakhiri tidur (bangun) atau kirim ulang dari HP offline **tidak** dicatat sebagai *Diubah*. |
 | 5 | Klik **Cetak / simpan PDF**. | Pratinjau cetak hanya berisi laporan (tanpa menu), dengan kolom tanda tangan *Dibuat oleh* dan *Mengetahui*. |
 
 ### 4. Skenario orang tua

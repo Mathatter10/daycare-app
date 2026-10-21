@@ -8,6 +8,7 @@ import (
 
 	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/push"
+	"github.com/Mathatter10/daycare-app/backend-go/internal/repository"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/views"
 )
 
@@ -56,12 +57,13 @@ func (h *AdminHandler) RestoreActivity(c fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	n, err := h.Q.RestoreActivity(c.Context(), id)
+	admin := middleware.CurrentUser(c)
+	n, err := h.Q.RestoreActivity(c.Context(), repository.RestoreActivityParams{ID: id, ActorID: admin.ID})
 	if err != nil {
 		return err
 	}
 	if n > 0 {
-		slog.Info("activity restored", "activity_id", id, "by", middleware.CurrentUser(c).ID)
+		slog.Info("activity restored", "activity_id", id, "by", admin.ID)
 	}
 	// Restored now or by someone else before: either way it leaves the list.
 	return views.Render(c, views.RestoredRow())
