@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
 import '../../core/labels.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
 import '../../theme.dart';
+import '../common/widgets.dart';
 
 /// Opens on top of the actions sheet; [onDone] closes that one after saving.
 Future<void> showMedicalSheet(BuildContext context, ChildEntity child, {required VoidCallback onDone}) =>
@@ -63,12 +63,7 @@ class _MedicalSheetState extends ConsumerState<_MedicalSheet> {
     if (!mounted) return;
     Navigator.pop(context);
     widget.onDone();
-    rootMessengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text('💊 Catatan kesehatan ${displayName(widget.child)} disimpan'),
-        action: SnackBarAction(label: 'BATALKAN', onPressed: () => actions.deleteActivity(id)),
-      ),
-    );
+    showUndoToast('💊 Catatan kesehatan ${displayName(widget.child)} disimpan', undo: () => actions.deleteActivity(id));
   }
 
   @override

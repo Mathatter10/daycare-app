@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app.dart';
 import '../../core/dates.dart';
 import '../../providers.dart';
 import '../../theme.dart';
+import '../caregiver/outbox_screen.dart';
 
 /// App bar icon showing sync state; tap to sync now.
 class SyncButton extends ConsumerWidget {
@@ -48,7 +50,7 @@ class SyncBanner extends ConsumerWidget {
     Color color = AppColors.muted;
     final rejected = counts.failed > 0;
     if (rejected) {
-      text = '${counts.failed} data ditolak server. Hubungi admin bila berulang.';
+      text = '${counts.failed} data ditolak server. Periksa sebelum mengirim ulang.';
       color = AppColors.medical;
     } else if (status.offline) {
       text = counts.pending > 0
@@ -70,17 +72,36 @@ class SyncBanner extends ConsumerWidget {
             Expanded(
               child: Text(text, style: TextStyle(color: color, fontSize: 13)),
             ),
-            if (rejected)
+            // Rejected writes are reviewed (and resent) on the outbox screen,
+            // so a stale delete is never replayed unseen.
+            if (rejected || counts.pending > 0)
               TextButton(
                 style: TextButton.styleFrom(foregroundColor: color, minimumSize: const Size(48, 48)),
-                onPressed: status.syncing ? null : () => ref.read(syncServiceProvider).retryFailed(),
-                child: const Text('COBA LAGI', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const OutboxScreen())),
+                child: const Text('LIHAT', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
           ],
         ),
       ),
     );
   }
+}
+
+/// Short confirmation at the bottom, optionally with BATALKAN (undo). It
+/// always times out: Flutter keeps a SnackBar with an action open until
+/// tapped, which left BATALKAN in the thumb zone on every screen and
+/// deleted activities by accident.
+void showUndoToast(String message, {VoidCallback? undo}) {
+  rootMessengerKey.currentState
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 4),
+        persist: false,
+        action: undo == null ? null : SnackBarAction(label: 'BATALKAN', onPressed: undo),
+      ),
+    );
 }
 
 Future<void> confirmSignOut(BuildContext context, WidgetRef ref) async {

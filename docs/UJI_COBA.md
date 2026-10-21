@@ -237,8 +237,8 @@ Login dengan email dan kata sandi pengasuh. Request pertama ke Render bisa butuh
 |---|---|---|
 | 1 | Login. | Muncul **Anak Hari Ini**: kartu tiap anak di kelas pengasuh, status *Belum datang*. Anak beralergi bertanda ⚠. |
 | 2 | Ketuk kartu anak → **CHECK-IN SEKARANG**. | Muncul pesan *"✅ … check-in 08.15"*; status kartu jadi *Hadir sejak …*. |
-| 3 | Ketuk kartu lagi → **Makan** → pilih porsi. | Tersimpan langsung, tanpa mengetik. Pesan memiliki tombol **BATALKAN**. |
-| 4 | Coba **BATALKAN** pada pesan berikutnya. | Aktivitas itu terhapus. |
+| 3 | Ketuk kartu lagi → **Makan** → pilih porsi. | Tersimpan langsung, tanpa mengetik. Pesan memiliki tombol **BATALKAN** dan **hilang sendiri setelah ±4 detik**. |
+| 4 | Coba **BATALKAN** pada pesan berikutnya (sebelum pesannya hilang). | Aktivitas itu terhapus. |
 | 5 | **Tidur**, tunggu sebentar, lalu ketuk kartu → **Bangun**. | Kartu menampilkan *Tidur sejak …*; setelah bangun muncul lama tidurnya. |
 | 6 | **Toilet** dan **Main** → pilih salah satu chip. | Tercatat dengan pesan konfirmasi. |
 | 7 | **Kesehatan** → *Suhu*, atur angka, **SIMPAN & KIRIM**. Coba juga *Cedera* tanpa keterangan. | Suhu tersimpan. *Cedera* tidak bisa disimpan sebelum keterangan diisi. |
@@ -258,6 +258,16 @@ Ikon di kanan atas menunjukkan status sinkron: angka merah = jumlah data yang be
 | 4 | Matikan mode pesawat. | Dalam beberapa detik angka hilang dan pita lenyap. |
 | 5 | Cek di HP orang tua atau lewat timeline API (bagian E langkah 4). | Semua aktivitas tadi ada, dengan jam saat dicatat (bukan jam saat terkirim). |
 | 6 | Coba **Keluar** saat masih ada data belum terkirim. | Muncul peringatan merah bahwa data akan **HILANG**. Pilih *Batal*. |
+| 7 | Masih offline: buka **Timeline**, geser satu aktivitas → **Hapus**. Ketuk **LIHAT** di pita. | Layar *Data belum terkirim* menampilkan *"Hapus … · nama anak"*. |
+| 8 | Ketuk **BATALKAN HAPUS**, kembali, lalu matikan mode pesawat. | Aktivitas tampil lagi dan **tidak** terhapus di server (cek timeline orang tua). |
+
+### 3b. Memulihkan aktivitas yang terhapus (admin web)
+
+| # | Langkah | Yang seharusnya terjadi |
+|---|---|---|
+| 1 | Hapus satu aktivitas di aplikasi pengasuh (online). | Hilang dari HP pengasuh dan orang tua. |
+| 2 | Admin web → menu **Aktivitas terhapus**. | Aktivitas itu ada, dengan jam dicatat, jam dihapus, dan **nama yang menghapus**. Hapusan sebelum fitur ini tercatat *"oleh (tidak tercatat)"*. |
+| 3 | Klik **Pulihkan** → OK. | Baris berubah jadi *"✓ Dipulihkan"*. Setelah sinkron (tarik layar ke bawah), aktivitas tampil lagi di HP pengasuh dan orang tua. |
 
 ### 4. Skenario orang tua
 
@@ -288,6 +298,7 @@ Uji keamanannya:
 | `go: command not found` | Tutup lalu buka lagi PowerShell/VS Code. |
 | Aplikasi: *"Tidak ada koneksi ke server"* padahal internet aktif | Server lokal: pastikan HP satu Wi-Fi dengan komputer, alamat IP benar, dan Windows Firewall mengizinkan port 8080. Render: tunggu ±1 menit lalu tarik layar ke bawah. |
 | Aplikasi: daftar anak kosong | Pengasuh belum ditugaskan ke kelas, atau kelas belum berisi anak (bagian C). Tarik ke bawah setelah memperbaiki. |
-| Aplikasi: pita merah *"N data ditolak server"* | Data tidak lolos validasi server (mis. anak sudah dipindah kelas). Data lain tetap terkirim; laporkan ke pengembang bila berulang. |
+| Aplikasi: pita merah *"N data ditolak server"* | Data tidak lolos validasi server (mis. anak sudah dipindah kelas). Data lain tetap terkirim. Ketuk **LIHAT** untuk melihat datanya; hapusan yang tidak diinginkan bisa dibatalkan, sisanya dikirim ulang dengan **Kirim ulang yang ditolak**. Laporkan ke pengembang bila berulang. |
+| Aktivitas hilang padahal tidak dihapus | Admin web → **Aktivitas terhapus**: lihat siapa yang menghapus dan kapan, lalu **Pulihkan**. |
 | Aplikasi: *"Sesi berakhir. N data belum terkirim masih tersimpan di HP ini"* | Akun dinonaktifkan atau sesinya dicabut. Data tidak hilang: aktifkan lagi akunnya, lalu masuk dengan akun **yang sama** agar data terkirim. Masuk dengan akun lain akan menghapusnya. |
 | Aplikasi: foto tidak pernah muncul | R2 belum dikonfigurasi di server (bagian F). Foto tetap antre di HP. |

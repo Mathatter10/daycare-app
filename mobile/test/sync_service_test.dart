@@ -236,6 +236,72 @@ void main() {
     expect(await outboxCount(failed: true), 0);
   });
 
+  Map<String, dynamic> serverRow(String id) => {
+    'id': id,
+    'child_id': 'c1',
+    'type': 'play',
+    'started_at': DateTime.now().toUtc().toIso8601String(),
+    'ended_at': null,
+    'details': {'activity': 'Mewarnai'},
+    'notes': null,
+    'caregiver_name': 'Nadia',
+    'deleted_at': null,
+  };
+
+  test('a rejected delete keeps the activity hidden, so a later retry is no surprise', () async {
+    // The 20 Oct incident: the delete was rejected, the pull brought the
+    // activity back on the phone, and "Coba lagi" deleted it an hour later.
+    final id = await actions.logActivity(childId: 'c1', type: 'play', details: {'activity': 'Mewarnai'});
+    await sync.syncNow();
+    await actions.deleteActivity(id);
+    api.failWith['deleteActivity'] = ApiException('forbidden', status: 403);
+    api.syncResponse = _syncBody(children: [_child('c1')], activities: [serverRow(id)]);
+
+    await sync.syncNow();
+
+    expect(await outboxCount(failed: true), 1);
+    expect(await isar.activityEntitys.getById(id), isNull, reason: 'still marked for deletion on this phone');
+  });
+
+  test('cancelling a queued delete puts the activity back and never sends it', () async {
+    final id = await actions.logActivity(childId: 'c1', type: 'play', details: {'activity': 'Mewarnai'});
+    await sync.syncNow();
+    api.calls.clear();
+    await actions.deleteActivity(id);
+    final entry = await isar.outboxEntrys.where().findFirst();
+
+    expect(await actions.cancelDelete(entry!.id), isTrue);
+    await sync.syncNow();
+
+    expect(api.calls, ['sync']);
+    final back = await isar.activityEntitys.getById(id);
+    expect(back!.detailsJson, contains('Mewarnai'));
+    expect(back.pending, isFalse);
+    expect(await outboxCount(), 0);
+  });
+
+  test('cancelling an old delete without a copy refetches history', () async {
+    await sync.syncNow(); // cursor a1 stored
+    await isar.writeTxn(
+      () => isar.outboxEntrys.put(
+        OutboxEntry()
+          ..kind = OutboxKind.deleteActivity
+          ..payload = jsonEncode({'id': 'old'})
+          ..createdAt = DateTime.now()
+          ..failed = true,
+      ),
+    );
+    final entry = await isar.outboxEntrys.where().findFirst();
+    api.syncResponse = _syncBody(children: [_child('c1')], activities: [serverRow('old')]);
+    api.syncCursors.clear();
+
+    expect(await actions.cancelDelete(entry!.id), isTrue);
+    await sync.syncNow();
+
+    expect(api.syncCursors, [null]);
+    expect(await isar.activityEntitys.getById('old'), isNotNull);
+  });
+
   test('pull removes hidden children, applies deletions, keeps unsent local edits', () async {
     ActivityEntity act(String id, String child, {bool pending = false}) => ActivityEntity()
       ..id = id

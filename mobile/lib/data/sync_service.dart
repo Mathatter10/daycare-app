@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:isar_community/isar.dart';
 
 import '../core/api_client.dart';
+import '../core/dates.dart';
 import 'models.dart';
 
 /// Outbox entry kinds.
@@ -15,6 +16,28 @@ abstract final class OutboxKind {
   static const deleteActivity = 'deleteActivity';
   static const uploadPhoto = 'uploadPhoto';
 }
+
+/// The copy of an activity kept in a queued delete. No "id" key: outbox
+/// lookups match `"id":"<activity id>"` in the payload.
+Map<String, dynamic> activitySnapshot(ActivityEntity a) => {
+  'child_id': a.childId,
+  'type': a.type,
+  'started_at': toApiTime(a.startedAt),
+  'ended_at': a.endedAt == null ? null : toApiTime(a.endedAt!),
+  'details_json': a.detailsJson,
+  'notes': a.notes,
+  'caregiver_name': a.caregiverName,
+};
+
+ActivityEntity activityFromSnapshot(String id, Map<String, dynamic> s) => ActivityEntity()
+  ..id = id
+  ..childId = s['child_id'] as String
+  ..type = s['type'] as String
+  ..startedAt = DateTime.parse(s['started_at'] as String).toLocal()
+  ..endedAt = s['ended_at'] == null ? null : DateTime.parse(s['ended_at'] as String).toLocal()
+  ..detailsJson = (s['details_json'] as String?) ?? '{}'
+  ..notes = s['notes'] as String?
+  ..caregiverName = s['caregiver_name'] as String?;
 
 class SyncStatus {
   const SyncStatus({this.syncing = false, this.offline = false, this.lastSyncAt, this.error});
@@ -99,6 +122,8 @@ class SyncService {
     for (final entry in entries) {
       final isPhoto = entry.kind == OutboxKind.uploadPhoto;
       if (isPhoto && photosBlocked) continue;
+      // Cancelled from the outbox screen since this run started.
+      if (await _isar.outboxEntrys.get(entry.id) == null) continue;
       final payload = jsonDecode(entry.payload) as Map<String, dynamic>;
       try {
         await _send(entry.kind, payload);
@@ -239,8 +264,16 @@ class SyncService {
   }
 
   Future<void> _applyActivities(List<Map<String, dynamic>> items) async {
+    // An activity with a delete still in the outbox (waiting or rejected)
+    // stays hidden. Restoring it from the server would show it again while
+    // the delete can still be sent later, e.g. by "Coba lagi".
+    final queuedDeletes = {
+      for (final e in await _isar.outboxEntrys.filter().kindEqualTo(OutboxKind.deleteActivity).findAll())
+        (jsonDecode(e.payload) as Map<String, dynamic>)['id'] as String,
+    };
     for (final a in items) {
       final id = a['id'] as String;
+      if (queuedDeletes.contains(id)) continue;
       final local = await _isar.activityEntitys.getById(id);
       if (local != null && local.pending) continue; // local edit not sent yet
       if (a['deleted_at'] != null) {

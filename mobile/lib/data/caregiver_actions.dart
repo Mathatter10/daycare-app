@@ -127,12 +127,43 @@ class CaregiverActions {
     _sync.kick();
   }
 
+  /// Queues a delete. The payload keeps a copy of the activity so the outbox
+  /// can show what goes and [cancelDelete] can put it back.
   Future<void> deleteActivity(String id) async {
     await _isar.writeTxn(() async {
+      final a = await _isar.activityEntitys.getById(id);
       await _isar.activityEntitys.deleteById(id);
-      await _enqueue(OutboxKind.deleteActivity, {'id': id});
+      await _enqueue(OutboxKind.deleteActivity, {'id': id, if (a != null) 'activity': activitySnapshot(a)});
     });
     _sync.kick();
+  }
+
+  /// Takes a queued (or rejected) delete back out of the outbox and shows
+  /// the activity again. Returns false if it was already sent.
+  Future<bool> cancelDelete(int entryId) async {
+    final cancelled = await _isar.writeTxn(() async {
+      final entry = await _isar.outboxEntrys.get(entryId);
+      if (entry == null || entry.kind != OutboxKind.deleteActivity) return false;
+      await _isar.outboxEntrys.delete(entryId);
+      final p = jsonDecode(entry.payload) as Map<String, dynamic>;
+      final id = p['id'] as String;
+      final snapshot = p['activity'] as Map<String, dynamic>?;
+      if (snapshot == null) {
+        // Queued by an older app version without a copy: fetch the last 14
+        // days again, which brings the activity back from the server.
+        await _isar.syncStateEntitys.put(SyncStateEntity());
+      } else if (await _isar.activityEntitys.getById(id) == null) {
+        final queuedEdit = await _isar.outboxEntrys
+            .filter()
+            .kindEqualTo(OutboxKind.putActivity)
+            .payloadContains('"id":"$id"')
+            .count();
+        await _isar.activityEntitys.put(activityFromSnapshot(id, snapshot)..pending = queuedEdit > 0);
+      }
+      return true;
+    });
+    _sync.kick();
+    return cancelled;
   }
 
   /// Moves a captured photo into app storage and queues its upload.

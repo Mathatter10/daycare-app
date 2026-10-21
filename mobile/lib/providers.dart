@@ -146,6 +146,11 @@ final outboxCountsProvider = StreamProvider<({int pending, int failed})>((ref) a
   }
 });
 
+/// Every queued write, oldest first, live.
+final outboxEntriesProvider = StreamProvider.autoDispose<List<OutboxEntry>>(
+  (ref) => ref.watch(isarProvider).outboxEntrys.where().watch(fireImmediately: true),
+);
+
 // --- local data streams ---------------------------------------------------------
 
 final childrenProvider = StreamProvider<List<ChildEntity>>((ref) {

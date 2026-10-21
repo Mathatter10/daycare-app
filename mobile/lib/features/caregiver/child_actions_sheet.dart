@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app.dart';
 import '../../core/dates.dart';
 import '../../core/labels.dart';
 import '../../data/caregiver_actions.dart';
@@ -19,18 +18,6 @@ Future<void> showChildActions(BuildContext context, ChildEntity child) => showMo
   isScrollControlled: true,
   builder: (_) => _ChildActionsSheet(child: child),
 );
-
-void _toast(String message, {VoidCallback? undo}) {
-  rootMessengerKey.currentState
-    ?..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 4),
-        action: undo == null ? null : SnackBarAction(label: 'BATALKAN', onPressed: undo),
-      ),
-    );
-}
 
 class _ChildActionsSheet extends ConsumerWidget {
   const _ChildActionsSheet({required this.child});
@@ -51,7 +38,7 @@ class _ChildActionsSheet extends ConsumerWidget {
     Future<void> logAndClose(String type, String message, {Map<String, dynamic> details = const {}}) async {
       final id = await actions.logActivity(childId: child.id, type: type, details: details);
       close();
-      _toast(message, undo: () => actions.deleteActivity(id));
+      showUndoToast(message, undo: () => actions.deleteActivity(id));
     }
 
     return SafeArea(
@@ -99,7 +86,7 @@ class _ChildActionsSheet extends ConsumerWidget {
                     onPick: (v) async {
                       close();
                       final id = await actions.logActivity(childId: child.id, type: 'eat', details: {'portion': v});
-                      _toast('🍼 Makan dicatat: ${portionLabels[v]}', undo: () => actions.deleteActivity(id));
+                      showUndoToast('🍼 Makan dicatat: ${portionLabels[v]}', undo: () => actions.deleteActivity(id));
                     },
                   ),
                 ),
@@ -113,7 +100,9 @@ class _ChildActionsSheet extends ConsumerWidget {
                     } else {
                       await actions.endSleep(sleep);
                       close();
-                      _toast('🌤️ $name bangun · tidur ${durationLabel(DateTime.now().difference(sleep.startedAt))}');
+                      showUndoToast(
+                        '🌤️ $name bangun · tidur ${durationLabel(DateTime.now().difference(sleep.startedAt))}',
+                      );
                     }
                   },
                 ),
@@ -126,7 +115,7 @@ class _ChildActionsSheet extends ConsumerWidget {
                     onPick: (v) async {
                       close();
                       final id = await actions.logActivity(childId: child.id, type: 'toilet', details: {'kind': v});
-                      _toast('🧻 Toilet dicatat: ${toiletLabels[v]}', undo: () => actions.deleteActivity(id));
+                      showUndoToast('🧻 Toilet dicatat: ${toiletLabels[v]}', undo: () => actions.deleteActivity(id));
                     },
                   ),
                 ),
@@ -139,7 +128,7 @@ class _ChildActionsSheet extends ConsumerWidget {
                     onPick: (v) async {
                       close();
                       final id = await actions.logActivity(childId: child.id, type: 'play', details: {'activity': v});
-                      _toast('🎨 $v dicatat', undo: () => actions.deleteActivity(id));
+                      showUndoToast('🎨 $v dicatat', undo: () => actions.deleteActivity(id));
                     },
                   ),
                 ),
@@ -155,7 +144,7 @@ class _ChildActionsSheet extends ConsumerWidget {
                     final path = await nav.push<String>(MaterialPageRoute(builder: (_) => const CameraScreen()));
                     if (path == null) return;
                     await actions.queuePhoto(childId: child.id, capturedPath: path);
-                    _toast('📷 Foto $name akan dikirim');
+                    showUndoToast('📷 Foto $name akan dikirim');
                   },
                 ),
                 _ActionTile(
@@ -182,7 +171,7 @@ class _ChildActionsSheet extends ConsumerWidget {
                 onPressed: () async {
                   await actions.checkIn(child.id);
                   close();
-                  _toast('✅ $name check-in ${hm(DateTime.now())}');
+                  showUndoToast('✅ $name check-in ${hm(DateTime.now())}');
                 },
               ),
             ],
@@ -288,7 +277,7 @@ Future<void> _showCheckOut(
                     Navigator.pop(ctx);
                     onDone();
                     await actions.checkOut(child.id, who);
-                    _toast('👋 ${displayName(child)} dijemput $who');
+                    showUndoToast('👋 ${displayName(child)} dijemput $who');
                   },
                 ),
             ],
@@ -306,7 +295,7 @@ Future<void> _showCheckOut(
               Navigator.pop(ctx);
               onDone();
               await actions.checkOut(child.id, who);
-              _toast('👋 ${displayName(child)} dijemput $who');
+              showUndoToast('👋 ${displayName(child)} dijemput $who');
             },
             child: const Text('SIMPAN & KIRIM'),
           ),
