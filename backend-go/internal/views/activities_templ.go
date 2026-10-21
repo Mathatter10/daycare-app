@@ -169,7 +169,7 @@ func DeletedActivityRow(r DeletedActivity) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var8 string
-		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(dateTimeLabel(r.StartedAt))
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(DateTimeLabel(r.StartedAt))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/activities.templ`, Line: 40, Col: 34}
 		}
@@ -195,7 +195,7 @@ func DeletedActivityRow(r DeletedActivity) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var10 string
-		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(dateTimeLabel(r.DeletedAt))
+		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(DateTimeLabel(r.DeletedAt))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/views/activities.templ`, Line: 44, Col: 34}
 		}

@@ -69,8 +69,8 @@ func ageLabel(dob time.Time) string {
 
 var monthShort = [...]string{"Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"}
 
-// dateTimeLabel formats like "20 Okt 2026 14:31".
-func dateTimeLabel(t time.Time) string {
+// DateTimeLabel formats like "20 Okt 2026 14:31".
+func DateTimeLabel(t time.Time) string {
 	return fmt.Sprintf("%d %s %d %s", t.Day(), monthShort[t.Month()-1], t.Year(), t.Format("15:04"))
 }
 

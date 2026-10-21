@@ -4,7 +4,7 @@ package views
 // the #modal container that create/edit forms are swapped into.
 templ AdminLayout(p Page) {
 	@Layout(p.Title) {
-		<header class="bg-brand text-white">
+		<header class="bg-brand text-white print:hidden">
 			<div class="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
 				<a href="/admin" class="text-lg font-bold">🍼 Daycare Admin</a>
 				<div class="flex items-center gap-3 text-sm">
@@ -26,7 +26,7 @@ templ AdminLayout(p Page) {
 				@navLink("/admin/activities/deleted", "Aktivitas terhapus", p.Nav == "deleted")
 			</nav>
 		</header>
-		<main class="mx-auto max-w-6xl px-4 py-6">
+		<main class="mx-auto max-w-6xl px-4 py-6 print:max-w-none print:p-0">
 			{ children... }
 		</main>
 		<div id="modal"></div>

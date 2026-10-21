@@ -43,7 +43,7 @@ func AdminLayout(p Page) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"bg-brand text-white\"><div class=\"mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3\"><a href=\"/admin\" class=\"text-lg font-bold\">🍼 Daycare Admin</a><div class=\"flex items-center gap-3 text-sm\"><span class=\"hidden sm:inline\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<header class=\"bg-brand text-white print:hidden\"><div class=\"mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3\"><a href=\"/admin\" class=\"text-lg font-bold\">🍼 Daycare Admin</a><div class=\"flex items-center gap-3 text-sm\"><span class=\"hidden sm:inline\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -84,7 +84,7 @@ func AdminLayout(p Page) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</nav></header><main class=\"mx-auto max-w-6xl px-4 py-6\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "</nav></header><main class=\"mx-auto max-w-6xl px-4 py-6 print:max-w-none print:p-0\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -92,7 +92,7 @@ func AdminLayout(p Page) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</main><div id=\"modal\"></div><script>\n\t\t\tfunction closeModal() { document.getElementById(\"modal\").innerHTML = \"\"; }\n\t\t\tdocument.addEventListener(\"keydown\", function (e) { if (e.key === \"Escape\") closeModal(); });\n\t\t\tdocument.addEventListener(\"htmx:responseError\", function (e) {\n\t\t\t\talert(\"Terjadi kesalahan (\" + e.detail.xhr.status + \"). Muat ulang halaman lalu coba lagi.\");\n\t\t\t});\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "</main><div id=\"modal\"></div><script>\r\n\t\t\tfunction closeModal() { document.getElementById(\"modal\").innerHTML = \"\"; }\r\n\t\t\tdocument.addEventListener(\"keydown\", function (e) { if (e.key === \"Escape\") closeModal(); });\r\n\t\t\tdocument.addEventListener(\"htmx:responseError\", function (e) {\r\n\t\t\t\talert(\"Terjadi kesalahan (\" + e.detail.xhr.status + \"). Muat ulang halaman lalu coba lagi.\");\r\n\t\t\t});\r\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

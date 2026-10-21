@@ -37,11 +37,11 @@ templ DeletedActivityRow(r DeletedActivity) {
 		</td>
 		<td class="px-4 py-3">{ r.ChildName }</td>
 		<td class="whitespace-nowrap px-4 py-3">
-			<p>{ dateTimeLabel(r.StartedAt) }</p>
+			<p>{ DateTimeLabel(r.StartedAt) }</p>
 			<p class="text-xs text-gray-500">oleh { r.CaregiverName }</p>
 		</td>
 		<td class="whitespace-nowrap px-4 py-3">
-			<p>{ dateTimeLabel(r.DeletedAt) }</p>
+			<p>{ DateTimeLabel(r.DeletedAt) }</p>
 			<p class="text-xs text-gray-500">
 				if r.DeletedBy == "" {
 					oleh (tidak tercatat)

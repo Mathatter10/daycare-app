@@ -7,6 +7,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Mathatter10/daycare-app/backend-go/internal/media"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/middleware"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/repository"
 	"github.com/Mathatter10/daycare-app/backend-go/internal/views"
@@ -25,10 +26,11 @@ type AdminHandler struct {
 	DB       *pgxpool.Pool
 	Q        *repository.Queries
 	Location *time.Location // daycare time zone for displayed times
+	Media    *media.Service // photos in the child timeline; may be disabled
 }
 
-func NewAdminHandler(pool *pgxpool.Pool, loc *time.Location) *AdminHandler {
-	return &AdminHandler{DB: pool, Q: repository.New(pool), Location: loc}
+func NewAdminHandler(pool *pgxpool.Pool, loc *time.Location, mediaSvc *media.Service) *AdminHandler {
+	return &AdminHandler{DB: pool, Q: repository.New(pool), Location: loc, Media: mediaSvc}
 }
 
 func (h *AdminHandler) page(c fiber.Ctx, title, nav string) views.Page {

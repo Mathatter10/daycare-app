@@ -13,6 +13,220 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getAttendanceReport = `-- name: GetAttendanceReport :one
+SELECT
+    a.check_in_at, a.check_out_at, a.picked_up_by, a.notes,
+    cin.full_name  AS check_in_by_name,
+    cout.full_name AS check_out_by_name
+FROM attendance a
+JOIN users cin       ON cin.id = a.check_in_by
+LEFT JOIN users cout ON cout.id = a.check_out_by
+WHERE a.child_id = $1 AND a.attendance_date = $2
+`
+
+type GetAttendanceReportParams struct {
+	ChildID        uuid.UUID `json:"child_id"`
+	AttendanceDate time.Time `json:"attendance_date"`
+}
+
+type GetAttendanceReportRow struct {
+	CheckInAt      time.Time   `json:"check_in_at"`
+	CheckOutAt     *time.Time  `json:"check_out_at"`
+	PickedUpBy     pgtype.Text `json:"picked_up_by"`
+	Notes          pgtype.Text `json:"notes"`
+	CheckInByName  string      `json:"check_in_by_name"`
+	CheckOutByName pgtype.Text `json:"check_out_by_name"`
+}
+
+func (q *Queries) GetAttendanceReport(ctx context.Context, arg GetAttendanceReportParams) (GetAttendanceReportRow, error) {
+	row := q.db.QueryRow(ctx, getAttendanceReport, arg.ChildID, arg.AttendanceDate)
+	var i GetAttendanceReportRow
+	err := row.Scan(
+		&i.CheckInAt,
+		&i.CheckOutAt,
+		&i.PickedUpBy,
+		&i.Notes,
+		&i.CheckInByName,
+		&i.CheckOutByName,
+	)
+	return i, err
+}
+
+const getChildReportHeader = `-- name: GetChildReportHeader :one
+
+SELECT
+    ch.id, ch.full_name, ch.nickname, ch.date_of_birth, ch.allergies,
+    ch.medical_notes, ch.is_active,
+    COALESCE(c.name, '')::text AS class_name,
+    p.full_name AS parent_name,
+    p.phone     AS parent_phone
+FROM children ch
+JOIN users p        ON p.id = ch.parent_id
+LEFT JOIN classes c ON c.id = ch.class_id
+WHERE ch.id = $1
+`
+
+type GetChildReportHeaderRow struct {
+	ID           uuid.UUID   `json:"id"`
+	FullName     string      `json:"full_name"`
+	Nickname     pgtype.Text `json:"nickname"`
+	DateOfBirth  time.Time   `json:"date_of_birth"`
+	Allergies    pgtype.Text `json:"allergies"`
+	MedicalNotes pgtype.Text `json:"medical_notes"`
+	IsActive     bool        `json:"is_active"`
+	ClassName    string      `json:"class_name"`
+	ParentName   string      `json:"parent_name"`
+	ParentPhone  pgtype.Text `json:"parent_phone"`
+}
+
+// Admin: one child's day, for incident reports ----------------------------------
+func (q *Queries) GetChildReportHeader(ctx context.Context, id uuid.UUID) (GetChildReportHeaderRow, error) {
+	row := q.db.QueryRow(ctx, getChildReportHeader, id)
+	var i GetChildReportHeaderRow
+	err := row.Scan(
+		&i.ID,
+		&i.FullName,
+		&i.Nickname,
+		&i.DateOfBirth,
+		&i.Allergies,
+		&i.MedicalNotes,
+		&i.IsActive,
+		&i.ClassName,
+		&i.ParentName,
+		&i.ParentPhone,
+	)
+	return i, err
+}
+
+const listChildDayActivitiesReport = `-- name: ListChildDayActivitiesReport :many
+SELECT
+    a.id, a.type, a.started_at, a.ended_at, a.details, a.notes,
+    a.created_at, a.updated_at, a.deleted_at,
+    cg.full_name AS caregiver_name,
+    d.full_name  AS deleted_by_name
+FROM activities a
+JOIN users cg     ON cg.id = a.caregiver_id
+LEFT JOIN users d ON d.id = a.deleted_by
+WHERE a.child_id = $1
+  AND a.started_at >= $2
+  AND a.started_at <  $3
+ORDER BY a.started_at, a.created_at
+`
+
+type ListChildDayActivitiesReportParams struct {
+	ChildID  uuid.UUID `json:"child_id"`
+	FromTime time.Time `json:"from_time"`
+	ToTime   time.Time `json:"to_time"`
+}
+
+type ListChildDayActivitiesReportRow struct {
+	ID            uuid.UUID    `json:"id"`
+	Type          ActivityType `json:"type"`
+	StartedAt     time.Time    `json:"started_at"`
+	EndedAt       *time.Time   `json:"ended_at"`
+	Details       []byte       `json:"details"`
+	Notes         pgtype.Text  `json:"notes"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+	DeletedAt     *time.Time   `json:"deleted_at"`
+	CaregiverName string       `json:"caregiver_name"`
+	DeletedByName pgtype.Text  `json:"deleted_by_name"`
+}
+
+// Includes deleted activities: a report must show what was removed.
+func (q *Queries) ListChildDayActivitiesReport(ctx context.Context, arg ListChildDayActivitiesReportParams) ([]ListChildDayActivitiesReportRow, error) {
+	rows, err := q.db.Query(ctx, listChildDayActivitiesReport, arg.ChildID, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChildDayActivitiesReportRow{}
+	for rows.Next() {
+		var i ListChildDayActivitiesReportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.Details,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.CaregiverName,
+			&i.DeletedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChildDayMediaReport = `-- name: ListChildDayMediaReport :many
+SELECT m.id, m.child_id, m.activity_id, m.uploaded_by, m.storage_key, m.mime_type, m.size_bytes, m.status, m.created_at, m.kind, m.thumb_key, m.width, m.height, m.taken_at, m.updated_at, m.deleted_at, u.full_name AS uploaded_by_name
+FROM media m
+JOIN users u ON u.id = m.uploaded_by
+WHERE m.child_id = $1
+  AND m.status = 'ready'
+  AND m.deleted_at IS NULL
+  AND m.taken_at >= $2
+  AND m.taken_at <  $3
+ORDER BY m.taken_at
+`
+
+type ListChildDayMediaReportParams struct {
+	ChildID  uuid.UUID `json:"child_id"`
+	FromTime time.Time `json:"from_time"`
+	ToTime   time.Time `json:"to_time"`
+}
+
+type ListChildDayMediaReportRow struct {
+	Medium         Medium `json:"medium"`
+	UploadedByName string `json:"uploaded_by_name"`
+}
+
+func (q *Queries) ListChildDayMediaReport(ctx context.Context, arg ListChildDayMediaReportParams) ([]ListChildDayMediaReportRow, error) {
+	rows, err := q.db.Query(ctx, listChildDayMediaReport, arg.ChildID, arg.FromTime, arg.ToTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChildDayMediaReportRow{}
+	for rows.Next() {
+		var i ListChildDayMediaReportRow
+		if err := rows.Scan(
+			&i.Medium.ID,
+			&i.Medium.ChildID,
+			&i.Medium.ActivityID,
+			&i.Medium.UploadedBy,
+			&i.Medium.StorageKey,
+			&i.Medium.MimeType,
+			&i.Medium.SizeBytes,
+			&i.Medium.Status,
+			&i.Medium.CreatedAt,
+			&i.Medium.Kind,
+			&i.Medium.ThumbKey,
+			&i.Medium.Width,
+			&i.Medium.Height,
+			&i.Medium.TakenAt,
+			&i.Medium.UpdatedAt,
+			&i.Medium.DeletedAt,
+			&i.UploadedByName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeletedActivities = `-- name: ListDeletedActivities :many
 
 SELECT

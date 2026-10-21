@@ -103,6 +103,7 @@ templ ChildRow(r repository.ListChildrenRow, oob bool) {
 			@StatusBadge(r.IsActive)
 		</td>
 		<td class="whitespace-nowrap px-4 py-3 text-right">
+			<a href={ templ.SafeURL("/admin/children/" + r.ID.String() + "/timeline") } class="rounded-md px-2 py-1 text-xs font-semibold text-brand hover:bg-brand/10">Timeline</a>
 			@RowButton("Ubah", false, templ.Attributes{"hx-get": "/admin/children/" + r.ID.String() + "/edit", "hx-target": "#modal"})
 			if r.IsActive {
 				@RowButton("Nonaktifkan", true, templ.Attributes{"hx-post": "/admin/children/" + r.ID.String() + "/active", "hx-vals": `{"active":"false"}`, "hx-confirm": "Nonaktifkan " + r.FullName + "? Data dan riwayatnya tetap tersimpan.", "hx-target": "closest tr", "hx-swap": "outerHTML"})

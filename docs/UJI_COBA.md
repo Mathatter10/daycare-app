@@ -269,6 +269,16 @@ Ikon di kanan atas menunjukkan status sinkron: angka merah = jumlah data yang be
 | 2 | Admin web → menu **Aktivitas terhapus**. | Aktivitas itu ada, dengan jam dicatat, jam dihapus, dan **nama yang menghapus**. Hapusan sebelum fitur ini tercatat *"oleh (tidak tercatat)"*. |
 | 3 | Klik **Pulihkan** → OK. | Baris berubah jadi *"✓ Dipulihkan"*. Setelah sinkron (tarik layar ke bawah), aktivitas tampil lagi di HP pengasuh dan orang tua. |
 
+### 3c. Timeline anak di admin web (dasar laporan kejadian)
+
+| # | Langkah | Yang seharusnya terjadi |
+|---|---|---|
+| 1 | Admin web → **Anak** → klik **Timeline** pada satu anak. | *Laporan harian anak* hari ini: data anak (kelas, usia, orang tua, alergi), ringkasan (hadir, jumlah aktivitas, dihapus, foto), lalu kronologi berurutan jam. |
+| 2 | Pindah hari dengan **‹ Sebelumnya** / **Berikutnya ›** atau pilih tanggal. | Isi laporan berganti tanpa memuat ulang halaman. Tanggal masa depan tidak bisa dipilih. |
+| 3 | Buka tanggal yang ada aktivitas dihapus. | Aktivitas itu tetap tampil, **dicoret** dengan latar merah, plus *"DIHAPUS … oleh …"* di kolom *Keterangan sistem*. |
+| 4 | Catat aktivitas saat HP offline, kirim lebih dari 10 menit kemudian, lalu buka timeline. | Kolom *Keterangan sistem* menulis *"Masuk ke server … (N menit setelah kejadian)"*. |
+| 5 | Klik **Cetak / simpan PDF**. | Pratinjau cetak hanya berisi laporan (tanpa menu), dengan kolom tanda tangan *Dibuat oleh* dan *Mengetahui*. |
+
 ### 4. Skenario orang tua
 
 Keluar, lalu login dengan akun orang tua (boleh di HP lain agar bisa melihat bersamaan).

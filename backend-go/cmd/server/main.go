@@ -120,7 +120,7 @@ func run() error {
 	admin.Post("/login", middleware.LoginRateLimit(), adminAuth.Login)
 	admin.Post("/logout", adminAuth.Logout)
 
-	adm := handlers.NewAdminHandler(pool, cfg.Location)
+	adm := handlers.NewAdminHandler(pool, cfg.Location, mediaSvc)
 	admin.Get("/", requireAdmin, adm.Dashboard)
 
 	admin.Get("/activities/deleted", requireAdmin, adm.DeletedActivities)
@@ -139,6 +139,7 @@ func run() error {
 	admin.Get("/children/:id/edit", requireAdmin, adm.EditChild)
 	admin.Post("/children/:id", requireAdmin, adm.UpdateChild)
 	admin.Post("/children/:id/active", requireAdmin, adm.SetChildActive)
+	admin.Get("/children/:id/timeline", requireAdmin, adm.ChildTimeline)
 
 	for _, ri := range []views.RoleInfo{views.CaregiverRole, views.ParentRole} {
 		base := "/" + ri.Path
