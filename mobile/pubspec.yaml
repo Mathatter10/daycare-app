@@ -47,6 +47,8 @@ dependencies:
   cached_network_image: ^4.0.4
   flutter_localizations:
     sdk: flutter
+  image_picker: ^1.2.4
+  flutter_image_compress: ^2.5.1
 
 dev_dependencies:
   flutter_test:

@@ -9,8 +9,8 @@ import '../../providers.dart';
 import '../../theme.dart';
 import '../common/widgets.dart';
 import '../timeline/timeline_screen.dart';
-import 'camera_screen.dart';
 import 'medical_sheet.dart';
+import 'photo_picker.dart';
 
 /// Tap 1 of the "log in under 3 taps" flow: the child's quick actions.
 Future<void> showChildActions(BuildContext context, ChildEntity child) => showModalBottomSheet<void>(
@@ -141,10 +141,10 @@ class _ChildActionsSheet extends ConsumerWidget {
                   onTap: () async {
                     final nav = Navigator.of(context);
                     close();
-                    final path = await nav.push<String>(MaterialPageRoute(builder: (_) => const CameraScreen()));
-                    if (path == null) return;
-                    await actions.queuePhoto(childId: child.id, capturedPath: path);
-                    showUndoToast('📷 Foto $name akan dikirim');
+                    final paths = await pickPhotos(nav.context);
+                    if (paths.isEmpty) return;
+                    await actions.queuePhotos(paths: paths, targets: {child.id: null});
+                    showUndoToast('📷 ${paths.length} foto $name akan dikirim');
                   },
                 ),
                 _ActionTile(

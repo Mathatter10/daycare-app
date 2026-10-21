@@ -179,6 +179,11 @@ class SyncService {
     }
   }
 
+  /// PUTs still queued for activity [id]. Matching on `"id":"…"` and the kind
+  /// matters: a queued photo also mentions the id (as activity_id).
+  Future<int> _queuedEdits(String id) =>
+      _isar.outboxEntrys.filter().kindEqualTo(OutboxKind.putActivity).payloadContains('"id":"$id"').count();
+
   /// A 409 for an activity that someone already deleted needs no retry.
   bool _isHarmless(String kind, ApiException e) =>
       kind == OutboxKind.putActivity && e.status == 409 && e.message == 'activity was deleted';
@@ -187,7 +192,7 @@ class SyncService {
     switch (kind) {
       case OutboxKind.putActivity:
         final id = p['id'] as String;
-        if (await _isar.outboxEntrys.filter().payloadContains(id).count() > 0) return; // newer edit queued
+        if (await _queuedEdits(id) > 0) return; // newer edit queued
         final a = await _isar.activityEntitys.getById(id);
         if (a != null) await _isar.activityEntitys.put(a..pending = false);
       case OutboxKind.checkIn:
@@ -203,6 +208,7 @@ class SyncService {
   // --- pull -----------------------------------------------------------------
 
   Future<void> _pull() async {
+    await _clearStalePending();
     final state = await _isar.syncStateEntitys.get(0) ?? SyncStateEntity();
     var more = true;
     while (more) {
@@ -231,6 +237,17 @@ class SyncService {
       });
       more = activities['has_more'] == true || attendance['has_more'] == true;
     }
+  }
+
+  /// Activities marked "pending" with no PUT left in the outbox, e.g. left
+  /// behind by an older version that took a queued photo for an edit.
+  Future<void> _clearStalePending() async {
+    final pending = await _isar.activityEntitys.filter().pendingEqualTo(true).findAll();
+    final stale = [
+      for (final a in pending)
+        if (await _queuedEdits(a.id) == 0) a..pending = false,
+    ];
+    if (stale.isNotEmpty) await _isar.writeTxn(() => _isar.activityEntitys.putAll(stale));
   }
 
   Future<bool> _hasNewChild(SyncStateEntity state, Map<String, dynamic> res) async {
@@ -275,7 +292,9 @@ class SyncService {
       final id = a['id'] as String;
       if (queuedDeletes.contains(id)) continue;
       final local = await _isar.activityEntitys.getById(id);
-      if (local != null && local.pending) continue; // local edit not sent yet
+      // A local edit not sent yet wins. Checking the outbox rather than the
+      // flag alone also heals rows left "pending" with nothing queued.
+      if (local != null && local.pending && await _queuedEdits(id) > 0) continue;
       if (a['deleted_at'] != null) {
         await _isar.activityEntitys.deleteById(id);
         continue;

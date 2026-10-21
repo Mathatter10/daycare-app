@@ -8,6 +8,7 @@ import '../../providers.dart';
 import '../../theme.dart';
 import '../common/widgets.dart';
 import 'child_actions_sheet.dart';
+import 'group_activity_screen.dart';
 
 /// Caregiver home: every child in the caregiver's classes as a card.
 class RosterScreen extends ConsumerWidget {
@@ -26,6 +27,11 @@ class RosterScreen extends ConsumerWidget {
           const SyncButton(),
           IconButton(tooltip: 'Keluar', icon: const Icon(Icons.logout), onPressed: () => confirmSignOut(context, ref)),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => const GroupActivityScreen())),
+        icon: const Icon(Icons.groups),
+        label: const Text('Aktivitas bersama', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
       body: Column(
         children: [
@@ -50,7 +56,8 @@ class RosterScreen extends ConsumerWidget {
                         ],
                       )
                     : GridView.builder(
-                        padding: const EdgeInsets.all(12),
+                        // Room below the last row for the floating button.
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           mainAxisSpacing: 12,

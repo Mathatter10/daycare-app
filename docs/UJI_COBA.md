@@ -245,6 +245,11 @@ Login dengan email dan kata sandi pengasuh. Request pertama ke Render bisa butuh
 | 8 | **Foto** → izinkan kamera → ambil foto. | Muncul *"📷 Foto … akan dikirim"*. Butuh R2 aktif di server (bagian F). |
 | 9 | **Timeline**. | Semua catatan hari itu urut waktu, foto tampil di atas. Geser satu aktivitas ke kiri → konfirmasi → terhapus. Panah ‹ › berpindah hari. |
 | 10 | **Check-out** → pilih penjemput (mis. *Ibu*) atau tulis nama lain. | Status kartu jadi *Pulang …*. |
+| 11 | Check-in 2 anak atau lebih, lalu ketuk **Aktivitas bersama** (tombol bawah kanan). | Anak yang hadir sudah terpilih. Anak lain bisa ditambah atau dihapus dari pilihan. |
+| 12 | Pilih **Main** → *Mewarnai* → **Tambah** foto → **Galeri** → pilih 1–2 foto → **SIMPAN UNTUK N ANAK**. | Muncul *"🎨 Mewarnai dicatat untuk N anak · 2 foto"*. Di timeline setiap anak ada aktivitas itu dan fotonya. |
+| 13 | Ulangi dengan **Makan**, lalu langsung ketuk **BATALKAN**. | Makan terhapus dari **semua** anak yang dipilih sekaligus. |
+| 14 | **Tidur** bersama saat satu anak sudah tidur. | Anak yang sudah tidur dilewati (ada keterangannya); bangun tetap per anak lewat kartunya. |
+| 15 | Di **Timeline**, ketuk satu aktivitas → **Kamera** atau **Galeri**. | Foto tertaut ke aktivitas itu (terlihat di timeline orang tua dan admin). Tombol **Foto** di menu anak juga menawarkan Kamera/Galeri. |
 
 Ikon di kanan atas menunjukkan status sinkron: angka merah = jumlah data yang belum terkirim. Tarik layar ke bawah untuk sinkron manual.
 

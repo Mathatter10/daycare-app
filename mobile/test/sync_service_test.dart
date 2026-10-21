@@ -100,7 +100,8 @@ void main() {
     api = FakeApi()..syncResponse = _syncBody(children: [_child('c1')]);
     statuses.clear();
     sync = TestSync(isar, api, statuses.add);
-    actions = CaregiverActions(isar, sync, user);
+    final photoDir = Directory.systemTemp.createTempSync('outbox_photos');
+    actions = CaregiverActions(isar, sync, user, photoDir: () async => photoDir);
   });
 
   tearDown(() => isar.close(deleteFromDisk: true));
@@ -302,6 +303,83 @@ void main() {
     expect(await isar.activityEntitys.getById('old'), isNotNull);
   });
 
+  test('group activity: one activity per child, photos copied per child and linked', () async {
+    final photo = File('${Directory.systemTemp.createTempSync().path}/g.jpg')..writeAsBytesSync([1, 2, 3]);
+
+    final ids = await actions.logGroupActivity(
+      childIds: ['c1', 'c2', 'c3'],
+      type: 'play',
+      details: {'activity': 'Mewarnai'},
+    );
+    await actions.queuePhotos(paths: [photo.path], targets: ids);
+
+    expect(ids.keys, ['c1', 'c2', 'c3']);
+    expect(ids.values.toSet(), hasLength(3), reason: 'separate activity ids');
+    for (final e in ids.entries) {
+      final a = await isar.activityEntitys.getById(e.value);
+      expect(a!.childId, e.key);
+      expect(a.detailsJson, contains('Mewarnai'));
+    }
+    final uploads = await isar.outboxEntrys.filter().kindEqualTo(OutboxKind.uploadPhoto).findAll();
+    expect(uploads, hasLength(3));
+    final payloads = [for (final u in uploads) jsonDecode(u.payload) as Map<String, dynamic>];
+    expect({for (final p in payloads) p['child_id']: p['activity_id']}, ids, reason: 'each photo linked to its child');
+    expect(payloads.map((p) => p['path']).toSet(), hasLength(3), reason: 'one file per upload');
+    expect(payloads.every((p) => File(p['path'] as String).existsSync()), isTrue);
+    expect(photo.existsSync(), isFalse, reason: 'source moved into the outbox');
+
+    await sync.syncNow();
+    expect(api.calls.where((c) => c == 'putActivity'), hasLength(3));
+    expect(api.calls.where((c) => c == 'uploadPhoto'), hasLength(3));
+    expect(
+      api.calls.indexOf('uploadPhoto'),
+      greaterThan(api.calls.lastIndexOf('putActivity')),
+      reason: 'activities exist on the server before photos link to them',
+    );
+    for (final id in ids.values) {
+      expect(
+        (await isar.activityEntitys.getById(id))!.pending,
+        isFalse,
+        reason: 'a queued photo mentioning the activity is not an unsent edit',
+      );
+    }
+  });
+
+  test('an activity left "pending" with nothing queued is cleared on sync', () async {
+    await isar.writeTxn(
+      () => isar.activityEntitys.put(
+        ActivityEntity()
+          ..id = 'stuck'
+          ..childId = 'c1'
+          ..type = 'play'
+          ..startedAt = DateTime.now()
+          ..detailsJson = '{}'
+          ..pending = true,
+      ),
+    );
+
+    await sync.syncNow();
+
+    expect((await isar.activityEntitys.getById('stuck'))!.pending, isFalse);
+  });
+
+  test('undoing a group activity deletes all of it and drops unsent photos', () async {
+    final photo = File('${Directory.systemTemp.createTempSync().path}/g.jpg')..writeAsBytesSync([1, 2, 3]);
+    final ids = await actions.logGroupActivity(childIds: ['c1', 'c2'], type: 'eat', details: {'portion': 'all'});
+    await actions.queuePhotos(paths: [photo.path], targets: ids);
+    final files = [
+      for (final u in await isar.outboxEntrys.filter().kindEqualTo(OutboxKind.uploadPhoto).findAll())
+        (jsonDecode(u.payload) as Map<String, dynamic>)['path'] as String,
+    ];
+
+    await actions.undoGroup(ids.values);
+
+    expect(await isar.activityEntitys.where().count(), 0);
+    expect(await isar.outboxEntrys.filter().kindEqualTo(OutboxKind.uploadPhoto).count(), 0);
+    expect(files.any((f) => File(f).existsSync()), isFalse);
+    expect(await isar.outboxEntrys.filter().kindEqualTo(OutboxKind.deleteActivity).count(), 2);
+  });
+
   test('pull removes hidden children, applies deletions, keeps unsent local edits', () async {
     ActivityEntity act(String id, String child, {bool pending = false}) => ActivityEntity()
       ..id = id
@@ -325,7 +403,15 @@ void main() {
         act('edited-locally', 'c1', pending: true),
         act('of-moved-child', 'c2'),
       ]);
+      // The unsent edit of 'edited-locally' (here: rejected, so still queued).
+      await isar.outboxEntrys.put(
+        OutboxEntry()
+          ..kind = OutboxKind.putActivity
+          ..payload = jsonEncode({'id': 'edited-locally', 'body': <String, dynamic>{}})
+          ..createdAt = DateTime.now(),
+      );
     });
+    api.failWith['putActivity'] = ApiException('details invalid', status: 422);
     final serverActivity = {
       'child_id': 'c1',
       'type': 'play',

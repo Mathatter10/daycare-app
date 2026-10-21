@@ -8,6 +8,7 @@ import '../../core/session.dart';
 import '../../data/models.dart';
 import '../../providers.dart';
 import '../../theme.dart';
+import '../caregiver/photo_picker.dart';
 import '../common/widgets.dart';
 
 /// One day of a child's attendance, activities and photos. Activities come
@@ -190,9 +191,14 @@ class _ActivityTile extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(hm(activity.startedAt), style: const TextStyle(fontWeight: FontWeight.w600)),
-            if (activity.pending) const Icon(Icons.cloud_upload_outlined, size: 16, color: AppColors.muted),
+            if (activity.pending)
+              const Icon(Icons.cloud_upload_outlined, size: 16, color: AppColors.muted)
+            else if (canDelete)
+              const Icon(Icons.add_a_photo_outlined, size: 16, color: AppColors.brand),
           ],
         ),
+        // Caregivers: tap to add photos linked to this activity.
+        onTap: canDelete ? () => _addPhotos(context, ref) : null,
       ),
     );
     if (!canDelete) return tile;
@@ -219,6 +225,14 @@ class _ActivityTile extends ConsumerWidget {
       onDismissed: (_) => ref.read(caregiverActionsProvider).deleteActivity(activity.id),
       child: tile,
     );
+  }
+
+  Future<void> _addPhotos(BuildContext context, WidgetRef ref) async {
+    final actions = ref.read(caregiverActionsProvider);
+    final paths = await pickPhotos(context);
+    if (paths.isEmpty) return;
+    await actions.queuePhotos(paths: paths, targets: {activity.childId: activity.id});
+    showUndoToast('📷 ${paths.length} foto ${styleFor(activity.type).label} akan dikirim');
   }
 }
 
